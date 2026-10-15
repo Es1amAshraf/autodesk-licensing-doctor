@@ -73,3 +73,11 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyExe}"; IconFilename: "{
 
 [Run]
 Filename: "{app}\{#MyExe}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+; A scan writes report.html / report.json next to the application. Removing them
+; lets Inno Setup delete the now-empty folder, so an uninstall leaves nothing
+; behind. Anything else the user generated (backups\, exported reports) is kept
+; on purpose - it is their data.
+[UninstallDelete]
+Type: files; Name: "{app}\report.html"
+Type: files; Name: "{app}\report.json"
