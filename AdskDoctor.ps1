@@ -666,9 +666,19 @@ foreach ($path in @(
 
 # The legacy ADLM licence cache. A patched ProductInformation.pit is one of the
 # classic non-genuine activation leftovers, and ADLS ignores the file, so the
-# Cleanup step resets it (the backup restores it if you roll back).
-$pit = @(Get-ChildItem -LiteralPath $env:ProgramData -Filter 'ProductInformation.pit' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 5)
-foreach ($f in $pit) { Add-Finding WARN 'Leftovers' ('ProductInformation.pit - legacy licence cache (the Cleanup step resets it) - ' + $f.LastWriteTime) $f.FullName }
+# Cleanup step resets it (the backup restores it if you roll back). Only the
+# known cache locations are searched: a recursive sweep of all of ProgramData
+# could take minutes on a busy machine.
+$pit = @()
+foreach ($loc in @(
+    (Join-Path $env:ProgramData 'Autodesk\Adlm'),
+    (Join-Path $env:ProgramData 'Autodesk\CLM\LGS'),
+    (Join-Path $env:ProgramData 'FLEXnet'))) {
+    if (Test-Path -LiteralPath $loc) {
+        $pit += @(Get-ChildItem -LiteralPath $loc -Filter 'ProductInformation.pit' -Recurse -File -ErrorAction SilentlyContinue)
+    }
+}
+foreach ($f in @($pit | Select-Object -First 5)) { Add-Finding WARN 'Leftovers' ('ProductInformation.pit - legacy licence cache (the Cleanup step resets it) - ' + $f.LastWriteTime) $f.FullName }
 
 # suspicious file names inside Autodesk trees
 $suspName = 'crack|keygen|licgen|xforce|xf-|adskflex|lmgrd|_orig|\.bak$|\.old$'

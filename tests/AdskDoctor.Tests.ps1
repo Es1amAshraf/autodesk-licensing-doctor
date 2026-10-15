@@ -102,7 +102,10 @@ Describe 'Layered backup and UNDO' {
         Test-Path -LiteralPath $manifestPath | Should -BeTrue
         $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json   # must be valid JSON
         @($manifest.Items).Count | Should -BeGreaterThan 0
-        $manifest.BackupFolder | Should -Be $script:BackupDir
+        # Compare folder names: a runner reports %TEMP% once as "RUNNER~1" and
+        # once as "runneradmin", so the full paths are allowed to differ.
+        Split-Path -Leaf $manifest.BackupFolder | Should -Be (Split-Path -Leaf $script:BackupDir)
+        Test-Path -LiteralPath $manifest.BackupFolder | Should -BeTrue -Because 'the manifest has to point at the backup folder'
 
         $undo = Join-Path $script:BackupDir 'UNDO.ps1'
         Test-Path -LiteralPath $undo | Should -BeTrue
