@@ -45,18 +45,22 @@ backup's `UNDO.ps1`.
 
 ## Quick start
 
+### Installer (recommended) — single `.exe`
+
+1. Download **`UNLOCK-DIGITAL-AdskDoctor-Setup-<version>.exe`** from the
+   [Releases](../../releases) page.
+2. Run it and accept the UAC prompt — it installs to
+   `%ProgramFiles%\UNLOCK DIGITAL\AdskDoctor` and creates Desktop / Start Menu
+   shortcuts, all branded with the **UNLOCK DIGITAL** logo.
+3. Launch **Autodesk Licensing Doctor** from the shortcut.
+4. Uninstall any time from **Settings → Apps** (or the Start Menu).
+
 ### Portable
 
-1. Download `UNLOCK-DIGITAL-AdskDoctor.exe` from the **Releases** page (or build it, see below).
-2. Keep it in the same folder as the `.ps1` scripts.
-3. Run it (accept the UAC prompt) → bilingual GUI opens.
-
-### Installer (Setup)
-
-1. Grab the `-Setup.zip` from Releases.
-2. Extract, right-click **`Install.cmd`** → *Run as administrator*.
-3. Launch from the Desktop / Start Menu shortcut.
-4. Uninstall from **Settings → Apps**.
+1. Download `AdskDoctor-v<version>-Portable.zip` from Releases and extract it.
+2. Run **`UNLOCK-DIGITAL-AdskDoctor.exe`** (accept the UAC prompt) → bilingual GUI opens.
+3. Keep all files in the same folder — the app calls the `.ps1` scripts sitting
+   next to the `.exe`.
 
 ---
 
@@ -116,23 +120,25 @@ machines, so the backup is layered — layers 2–5 do not depend on VSS:
 
 ## Build from source
 
-Requirements: **PowerShell 5.1+**, the [`ps2exe`](https://github.com/MScholtes/PS2EXE) module.
+Requirements: **PowerShell 5.1+**, the [`ps2exe`](https://github.com/MScholtes/PS2EXE)
+module and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (for the installer `.exe`).
 
 ```powershell
-# compile the exe and cut a release with 3 zips + record
+# compile the exe and cut a release (Project.zip + Portable.zip + Setup.exe + record)
 .\Build-Release.ps1 -Version 1.2.0 -Notes "..." -Recompile
 ```
 
-Each release is stored under `releases\v<version>\` in three zipped forms:
+Each release is stored under `releases\v<version>\` in **three forms**:
 
-| Zip | Contents |
-|-----|----------|
-| `AdskDoctor-v<ver>-Project.zip` | source files |
+| Artifact | Contents |
+|----------|----------|
+| `AdskDoctor-v<ver>-Project.zip` | full source files |
 | `AdskDoctor-v<ver>-Portable.zip` | run anywhere, no install |
-| `AdskDoctor-v<ver>-Setup.zip` | installer package |
+| `UNLOCK-DIGITAL-AdskDoctor-Setup-<ver>.exe` | real installer (Inno Setup), branded icon |
 
 …plus `RELEASE-RECORD.txt`, `manifest.json` and `SHA256SUMS.txt`, and an entry
-appended to `RELEASES.md`.
+appended to `RELEASES.md`. Pass `-LegacySetupZip` to emit the old
+`-Setup.zip` script installer instead of the `.exe`.
 
 ---
 
@@ -145,9 +151,10 @@ appended to `RELEASES.md`.
 | `Backup.ps1` | Phase 2 — layered backup + `UNDO.ps1` generator |
 | `Clean.ps1` | Phase 3 — cleanup (preview by default) |
 | `Repair.ps1` | Phase 4 — repair / reinstall official components |
-| `Build-Release.ps1` | release builder (3 zips + record) |
-| `installer/` | `Install.cmd` / `Install.ps1` / `Uninstall.*` |
-| `make-icon.ps1` | generates `AdskDoctor.ico` |
+| `Build-Release.ps1` | release builder (Project/Portable zips + Setup.exe + record) |
+| `installer/` | `AdskDoctor.iss` (Inno Setup) + `Install.cmd` / `Install.ps1` / `Uninstall.*` |
+| `make-icon.ps1` | generates `AdskDoctor.ico` (app icon) |
+| `make-logo-icon.ps1` | generates `unlock-logo.ico` (installer / brand icon) from `unlock-logo.png` |
 | `Run-Diagnostic.cmd`, `Run-Backup.cmd` | self-elevating launchers |
 
 ---

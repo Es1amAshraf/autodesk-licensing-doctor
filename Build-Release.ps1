@@ -1,11 +1,12 @@
 <#
   Build-Release.ps1  -  UNLOCK DIGITAL  -  Autodesk Licensing Doctor
   ------------------------------------------------------------------
-  Creates a release for a given version and stores THREE zipped forms:
+  Creates a release for a given version and stores THREE forms:
 
-    1) PROJECT   -> AdskDoctor-v<ver>-Project.zip   (source files)
-    2) PORTABLE  -> AdskDoctor-v<ver>-Portable.zip  (run from anywhere, no install)
-    3) SETUP     -> AdskDoctor-v<ver>-Setup.zip     (installer package)
+    1) PROJECT   -> AdskDoctor-v<ver>-Project.zip        (source files)
+    2) PORTABLE  -> AdskDoctor-v<ver>-Portable.zip       (run from anywhere)
+    3) SETUP     -> UNLOCK-DIGITAL-AdskDoctor-Setup-<ver>.exe   (real installer,
+                    Inno Setup, branded with unlock-logo.ico)
 
   Plus a per-version record (RELEASE-RECORD.txt + manifest.json + SHA256SUMS)
   and an entry appended to RELEASES.md.
@@ -25,6 +26,9 @@ param(
     # Re-encode the GUI script (UTF-8 BOM, required for Arabic) and recompile the exe
     [switch]$Recompile,
 
+    # Use the legacy ZIP-based installer instead of the Inno Setup .exe
+    [switch]$LegacySetupZip,
+
     # Open the release folder when done
     [switch]$Open
 )
@@ -42,31 +46,33 @@ function Save-Text {
     $enc = New-Object System.Text.UTF8Encoding($true)   # UTF-8 with BOM (Arabic-safe)
     [System.IO.File]::WriteAllText($Path, $Text, $enc)
 }
-
-function Get-Sha256([string]$Path) {
-    (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
-}
-
-function New-BomFile {
-    param([string]$Path)
+function Get-Sha256([string]$Path) { (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash }
+function New-BomFile { param([string]$Path)
     $c = [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8)
     [System.IO.File]::WriteAllText($Path, $c, (New-Object System.Text.UTF8Encoding($true)))
 }
+function New-Zip { param([string]$SourceDir, [string]$DestZip)
+    if (Test-Path $DestZip) { Remove-Item $DestZip -Force }
+    Compress-Archive -Path (Join-Path $SourceDir '*') -DestinationPath $DestZip -CompressionLevel Optimal -Force
+}
 
-# ---------------------------------------------------------------------------
-# 0) sanity: required files
-# ---------------------------------------------------------------------------
 Write-Host ""
 Write-Host "UNLOCK DIGITAL - Autodesk Licensing Doctor" -ForegroundColor White
 Write-Host ("Building release v" + $Version) -ForegroundColor White
 Write-Host ""
 
+# ---------------------------------------------------------------------------
+# 0) paths + sanity
+# ---------------------------------------------------------------------------
 $gui        = Join-Path $root 'AdskDoctor-GUI.ps1'
 $exeName    = 'UNLOCK-DIGITAL-AdskDoctor.exe'
 $exe        = Join-Path $root $exeName
 $icon       = Join-Path $root 'AdskDoctor.ico'
+$logoPng    = Join-Path $root 'unlock-logo.png'
+$logoIco    = Join-Path $root 'unlock-logo.ico'
+$licenseF   = Join-Path $root 'LICENSE'
 $runtimeScripts = @('AdskDoctor.ps1','Backup.ps1','Clean.ps1','Repair.ps1')
-$sourceScripts  = @('AdskDoctor.ps1','Backup.ps1','Clean.ps1','Repair.ps1','AdskDoctor-GUI.ps1','make-icon.ps1','Build-Release.ps1')
+$sourceScripts  = @('AdskDoctor.ps1','Backup.ps1','Clean.ps1','Repair.ps1','AdskDoctor-GUI.ps1','make-icon.ps1','make-logo-icon.ps1','Build-Release.ps1')
 $launchers      = @('Run-Diagnostic.cmd','Run-Backup.cmd')
 $installerFiles = @('Install.ps1','Install.cmd','Uninstall.ps1','Uninstall.cmd')
 
@@ -74,8 +80,24 @@ $required = @('AdskDoctor-GUI.ps1') + $runtimeScripts + @('AdskDoctor.ico')
 $missing  = @($required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $root $_)) })
 if ($missing.Count) { throw ("Missing required file(s): " + ($missing -join ', ')) }
 
+# brand icon for the installer (generate from the PNG logo when possible)
+if (-not (Test-Path -LiteralPath $logoIco) -and (Test-Path -LiteralPath $logoPng)) {
+    Write-Step "Generating unlock-logo.ico from unlock-logo.png ..."
+    & (Join-Path $root 'make-logo-icon.ps1') -Source $logoPng -Dest $logoIco | Out-Null
+}
+$hasIco = Test-Path -LiteralPath $logoIco
+
+# locate ISCC (Inno Setup)
+$iscc = $null
+foreach ($p in @(
+        (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
+        (Join-Path $env:ProgramFiles      'Inno Setup 6\ISCC.exe'),
+        (Join-Path $env:LOCALAPPDATA      'Programs\Inno Setup 6\ISCC.exe'))) {
+    if (Test-Path -LiteralPath $p) { $iscc = $p; break }
+}
+
 # ---------------------------------------------------------------------------
-# 1) optional: recompile the exe from the (BOM-encoded) GUI source
+# 1) optional: recompile the app exe
 # ---------------------------------------------------------------------------
 if ($Recompile) {
     Write-Step "Re-encoding GUI (UTF-8 BOM) and recompiling exe ..."
@@ -98,30 +120,27 @@ $releaseDir = Join-Path $root ("releases\v" + $Version)
 if (Test-Path $releaseDir) { Remove-Item $releaseDir -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 
-$stage = Join-Path $env:TEMP ("adsk_release_" + [guid]::NewGuid().ToString('N'))
-$sProj = Join-Path $stage 'project'
-$sPort = Join-Path $stage 'portable'
-$sSetup = Join-Path $stage 'setup'
+$stage    = Join-Path $env:TEMP ("adsk_release_" + [guid]::NewGuid().ToString('N'))
+$sProj    = Join-Path $stage 'project'
+$sPort    = Join-Path $stage 'portable'
+$sSetup   = Join-Path $stage 'setup'
 $sPayload = Join-Path $sSetup 'payload'
 New-Item -ItemType Directory -Force -Path $sProj,$sPort,$sSetup,$sPayload | Out-Null
 
 Write-Step "Staging files ..."
 
-# shared: brand logo (png preferred, else existing)
-$logoPng = Join-Path $root 'unlock-logo.png'
-
 # --- 2a) PROJECT -----------------------------------------------------------
-foreach ($f in $sourceScripts) {
-    $src = Join-Path $root $f
-    if (Test-Path $src) { Copy-Item $src $sProj -Force }
-}
-foreach ($f in $launchers) {
+foreach ($f in $sourceScripts + $launchers) {
     $src = Join-Path $root $f
     if (Test-Path $src) { Copy-Item $src $sProj -Force }
 }
 Copy-Item $icon $sProj -Force
-if (Test-Path (Join-Path $root 'README.md')) { Copy-Item (Join-Path $root 'README.md') $sProj -Force }
+if ($hasIco) { Copy-Item $logoIco $sProj -Force }
 if (Test-Path $logoPng) { Copy-Item $logoPng $sProj -Force }
+foreach ($f in @('README.md','LICENSE','RELEASES.md','.gitignore','.gitattributes')) {
+    $src = Join-Path $root $f
+    if (Test-Path $src) { Copy-Item $src $sProj -Force }
+}
 $instDirSrc = Join-Path $root 'installer'
 if (Test-Path $instDirSrc) {
     $d = Join-Path $sProj 'installer'
@@ -129,91 +148,102 @@ if (Test-Path $instDirSrc) {
     Copy-Item (Join-Path $instDirSrc '*') $d -Force
 }
 
-# --- 2b) PORTABLE ----------------------------------------------------------
-Copy-Item $exe $sPort -Force
-foreach ($f in $runtimeScripts) { Copy-Item (Join-Path $root $f) $sPort -Force }
-Copy-Item $icon $sPort -Force
-if (Test-Path $logoPng) { Copy-Item $logoPng $sPort -Force }
-foreach ($f in $launchers) {
-    $src = Join-Path $root $f
-    if (Test-Path $src) { Copy-Item $src $sPort -Force }
-}
-if (Test-Path (Join-Path $root 'README.md')) { Copy-Item (Join-Path $root 'README.md') $sPort -Force }
+# --- shared runtime payload (used by portable + installer) ------------------
+$runtimePayload = @($exe) + ($runtimeScripts | ForEach-Object { Join-Path $root $_ }) + @($icon)
+if ($hasIco) { $runtimePayload += $logoIco }
+if (Test-Path $logoPng) { $runtimePayload += $logoPng }
+$runtimePayload += ($launchers | ForEach-Object { Join-Path $root $_ } | Where-Object { Test-Path $_ })
 
+# --- 2b) PORTABLE ----------------------------------------------------------
+Copy-Item $runtimePayload $sPort -Force
+if (Test-Path (Join-Path $root 'README.md')) { Copy-Item (Join-Path $root 'README.md') $sPort -Force }
+if (Test-Path $licenseF) { Copy-Item $licenseF $sPort -Force }
 $portableReadme = @"
 UNLOCK DIGITAL - Autodesk Licensing Doctor  (PORTABLE v$Version)
 =================================================================
 No installation required. Just run:  $exeName
-(Right-click -> "Run as administrator", or accept the UAC prompt.)
+(accept the UAC prompt - the tool needs administrator rights.)
 
 Keep ALL files in this folder together - the app calls the .ps1 scripts
 that sit next to the .exe.
+
+Copyright (c) 2026 UNLOCK DIGITAL - By Eng. Eslam Ashraf   (MIT)
 "@
 Save-Text (Join-Path $sPort 'PORTABLE-READ-ME.txt') $portableReadme
 
-# --- 2c) SETUP -------------------------------------------------------------
-# payload = the portable runtime
-Copy-Item $exe $sPayload -Force
-foreach ($f in $runtimeScripts) { Copy-Item (Join-Path $root $f) $sPayload -Force }
-Copy-Item $icon $sPayload -Force
-if (Test-Path $logoPng) { Copy-Item $logoPng $sPayload -Force }
-foreach ($f in $launchers) {
-    $src = Join-Path $root $f
-    if (Test-Path $src) { Copy-Item $src $sPayload -Force }
-}
+# --- 2c) INSTALLER ---------------------------------------------------------
+Copy-Item $runtimePayload $sPayload -Force
+if (Test-Path (Join-Path $root 'README.md')) { Copy-Item (Join-Path $root 'README.md') $sPayload -Force }
 
-# installer scripts (from installer\ folder); fall back to embedded copies
-foreach ($f in $installerFiles) {
-    $src = Join-Path $instDirSrc $f
-    if (Test-Path $src) { Copy-Item $src $sSetup -Force }
-    else { throw "Installer file missing: $src" }
-}
+$setupExe = Join-Path $releaseDir ("UNLOCK-DIGITAL-AdskDoctor-Setup-$Version.exe")
+$usedInno = $false
 
-$setupReadme = @"
+if ($iscc -and -not $LegacySetupZip) {
+    Write-Step "Compiling installer with Inno Setup ..."
+    $iss = Join-Path $instDirSrc 'AdskDoctor.iss'
+    $args = @(
+        "/DVersion=$Version",
+        "/DPayloadDir=$sPayload",
+        "/DOutputDir=$releaseDir",
+        "/DIconFile=$logoIco",
+        "/DLicenseFile=$licenseF",
+        $iss
+    )
+    & $iscc @args | Out-Null
+    if (Test-Path -LiteralPath $setupExe) {
+        $usedInno = $true
+        Write-Ok "Setup.exe created"
+    } else {
+        Write-Warn2 "Inno Setup did not produce the expected exe - falling back to Setup.zip"
+    }
+}
+if (-not $usedInno) {
+    foreach ($f in $installerFiles) {
+        $src = Join-Path $instDirSrc $f
+        if (Test-Path $src) { Copy-Item $src $sSetup -Force }
+    }
+    $setupReadme = @"
 UNLOCK DIGITAL - Autodesk Licensing Doctor  (SETUP v$Version)
 ==============================================================
 1. Extract this ZIP anywhere.
-2. Right-click  Install.cmd  ->  Run as administrator
-   (or just double-click and accept the UAC prompt)
-3. Launch it from the Desktop / Start Menu shortcut:
-     "Autodesk Licensing Doctor"
-
-Installs to:  %ProgramFiles%\UNLOCK DIGITAL\AdskDoctor
-Removes with: Settings > Apps  (or Uninstall.cmd)
+2. Right-click  Install.cmd  ->  Run as administrator.
+3. Launch from the Desktop / Start Menu shortcut "Autodesk Licensing Doctor".
+Installs to: %ProgramFiles%\UNLOCK DIGITAL\AdskDoctor
 "@
-Save-Text (Join-Path $sSetup 'SETUP-READ-ME.txt') $setupReadme
+    Save-Text (Join-Path $sSetup 'SETUP-READ-ME.txt') $setupReadme
+}
 
 # ---------------------------------------------------------------------------
-# 3) zip the three forms
+# 3) build the artifacts
 # ---------------------------------------------------------------------------
-function New-Zip {
-    param([string]$SourceDir, [string]$DestZip)
-    if (Test-Path $DestZip) { Remove-Item $DestZip -Force }
-    Compress-Archive -Path (Join-Path $SourceDir '*') -DestinationPath $DestZip -CompressionLevel Optimal -Force
-}
+Write-Step "Creating artifacts ..."
 
 $zipProject  = Join-Path $releaseDir ("AdskDoctor-v$Version-Project.zip")
 $zipPortable = Join-Path $releaseDir ("AdskDoctor-v$Version-Portable.zip")
-$zipSetup    = Join-Path $releaseDir ("AdskDoctor-v$Version-Setup.zip")
+New-Zip $sProj $zipProject
+New-Zip $sPort $zipPortable
 
-Write-Step "Creating ZIPs ..."
-New-Zip $sProj  $zipProject
-New-Zip $sPort  $zipPortable
-New-Zip $sSetup $zipSetup
+$artifacts = @($zipProject, $zipPortable)
+if ($usedInno) {
+    $artifacts += $setupExe
+} else {
+    $zipSetup = Join-Path $releaseDir ("AdskDoctor-v$Version-Setup.zip")
+    New-Zip $sSetup $zipSetup
+    $artifacts += $zipSetup
+}
 Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
 
 # ---------------------------------------------------------------------------
 # 4) record (hashes + manifest + changelog)
 # ---------------------------------------------------------------------------
-$zips = @($zipProject, $zipPortable, $zipSetup)
 $hashLines = @()
-foreach ($z in $zips) {
-    $hashLines += ("{0}  {1}" -f (Get-Sha256 $z), (Split-Path $z -Leaf))
-}
+foreach ($a in $artifacts) { $hashLines += ("{0}  {1}" -f (Get-Sha256 $a), (Split-Path $a -Leaf)) }
 Save-Text (Join-Path $releaseDir 'SHA256SUMS.txt') (($hashLines -join "`r`n") + "`r`n")
 
 $built = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
 $ver   = (Get-Item $exe).VersionInfo
+$kind  = { param($p) if ($p -like '*.exe') { 'installer (.exe)' } elseif ($p -like '*Project*') { 'source' } else { 'portable' } }
+
 $record = @"
 =========================================================
  UNLOCK DIGITAL - Autodesk Licensing Doctor
@@ -225,12 +255,13 @@ $record = @"
  Copyright      : Unlock Digital - By Eng. Eslam Ashraf
  exe FileVersion: $($ver.FileVersion)
  exe Size       : $([math]::Round((Get-Item $exe).Length/1KB,1)) KB
+ Installer      : $(if ($usedInno) { 'Inno Setup .exe' } else { 'legacy Setup.zip' })
 
  Notes:
  $Notes
 
  Files:
-$(($zips | ForEach-Object { "   - " + (Split-Path $_ -Leaf) + "  (" + [math]::Round((Get-Item $_).Length/1KB,1) + " KB)" }) -join "`r`n")
+$(($artifacts | ForEach-Object { "   - " + (Split-Path $_ -Leaf) + "  (" + [math]::Round((Get-Item $_).Length/1KB,1) + " KB)" }) -join "`r`n")
 
  SHA-256:
 $(($hashLines | ForEach-Object { "   " + $_ }) -join "`r`n")
@@ -239,42 +270,40 @@ $(($hashLines | ForEach-Object { "   " + $_ }) -join "`r`n")
 Save-Text (Join-Path $releaseDir 'RELEASE-RECORD.txt') $record
 
 $manifest = [ordered]@{
-    product   = 'UNLOCK DIGITAL - Autodesk Licensing Doctor'
-    version   = $Version
-    built     = $built
-    company   = 'UNLOCK DIGITAL'
-    copyright = 'Unlock Digital - By Eng. Eslam Ashraf'
-    notes     = $Notes
-    artifacts = @(
-        foreach ($z in $zips) {
+    product     = 'UNLOCK DIGITAL - Autodesk Licensing Doctor'
+    version     = $Version
+    built       = $built
+    company     = 'UNLOCK DIGITAL'
+    copyright   = 'Unlock Digital - By Eng. Eslam Ashraf'
+    installer   = $(if ($usedInno) { 'inno-setup-exe' } else { 'legacy-zip' })
+    notes       = $Notes
+    artifacts   = @(
+        foreach ($a in $artifacts) {
             [ordered]@{
-                name   = (Split-Path $z -Leaf)
-                sizeMB = [math]::Round((Get-Item $z).Length/1MB, 2)
-                sha256 = (Get-Sha256 $z)
+                name   = (Split-Path $a -Leaf)
+                kind   = (& $kind $a)
+                sizeMB = [math]::Round((Get-Item $a).Length/1MB, 2)
+                sha256 = (Get-Sha256 $a)
             }
         }
     )
 }
 Save-Text (Join-Path $releaseDir 'manifest.json') ($manifest | ConvertTo-Json -Depth 5)
 
-# master changelog
-$log = Join-Path $root 'RELEASES.md'
+$log    = Join-Path $root 'RELEASES.md'
 $header = "# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases`r`n`r`n"
 $entry  = "## v$Version  ($built)`r`n`r`n$Notes`r`n`r`n"
-foreach ($z in $zips) {
-    $entry += "- ``$(Split-Path $z -Leaf)``  -  $([math]::Round((Get-Item $z).Length/1MB,2)) MB  -  SHA256 ``$(Get-Sha256 $z)```r`n"
+foreach ($a in $artifacts) {
+    $entry += "- ``$(Split-Path $a -Leaf)``  -  $([math]::Round((Get-Item $a).Length/1MB,2)) MB  -  SHA256 ``$(Get-Sha256 $a)```r`n"
 }
 $entry += "`r`n"
-if (Test-Path $log) {
-    Add-Content -LiteralPath $log -Value $entry -Encoding UTF8
-} else {
-    Save-Text $log ($header + $entry)
-}
+if (Test-Path $log) { Add-Content -LiteralPath $log -Value $entry -Encoding UTF8 }
+else { Save-Text $log ($header + $entry) }
 
 Write-Host ""
 Write-Ok "Release v$Version ready:"
-foreach ($z in $zips) {
-    Write-Host ("      " + (Split-Path $z -Leaf) + "   " + ([math]::Round((Get-Item $z).Length/1MB,2)) + " MB") -ForegroundColor Gray
+foreach ($a in $artifacts) {
+    Write-Host ("      " + (Split-Path $a -Leaf) + "   " + ([math]::Round((Get-Item $a).Length/1MB,2)) + " MB") -ForegroundColor Gray
 }
 Write-Host ("    Record: " + $releaseDir) -ForegroundColor Gray
 Write-Host ""
