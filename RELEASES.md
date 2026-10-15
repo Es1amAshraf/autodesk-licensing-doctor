@@ -1,8 +1,20 @@
 ﻿# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases
 
-## v1.2.1  (2026-10-15 19:02:23)
+## v1.2.2  (2026-10-15 19:20:35)
+
+Fixes the crash when the cleanup actually changed the machine: the process step matched the toolkit's own executable (UNLOCK-DIGITAL-AdskDoctor) and stopped it. The toolkit's process tree is now excluded.
+
+- `AdskDoctor-v1.2.2-Project.zip`  -  0.12 MB  -  SHA256 `5315C7B629F6F72D21883ACF5B9E4E367D5BCEDFD472BD58941A4BD5077AC168`
+- `AdskDoctor-v1.2.2-Portable.zip`  -  0.13 MB  -  SHA256 `55BCFA05D6653C5EE2307ED94051784368C1EB2AEFFBB02A8954073822CC52BC`
+- `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.2.exe`  -  2.1 MB  -  SHA256 `8B7D46B0E3D9C4D7C7DE051FC4C40D80EF87D23A169B1FECF35FDD5694361E03`
+
+## v1.2.1  (2026-10-15 19:02:23)  — WITHDRAWN, use v1.2.2
 
 Fixes a crash that closed the application as soon as a task started in the compiled build (installer and portable package). The bilingual AR/EN GUI is unchanged.
+
+**Withdrawn:** this build still stopped its own process when the cleanup was applied.
+The published binaries were removed from the GitHub release; the local copies below
+were kept for the record. Use v1.2.2.
 
 - `AdskDoctor-v1.2.1-Project.zip`  -  0.12 MB  -  SHA256 `3329E85CDBE9D8097C893E0B7C9D081BFE110E704A8172228D2A7245192BDA66`
 - `AdskDoctor-v1.2.1-Portable.zip`  -  0.13 MB  -  SHA256 `E59EC55E4217CB2D31E7C79209669D1A1D9EDB7E308ECEA8016AE4CC32408EB9`

@@ -54,5 +54,5 @@ non-genuine software, so we care about:
 - Every release ships `SHA256SUMS.txt`; verify before running:
 
 ```powershell
-Get-FileHash .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.1.exe -Algorithm SHA256
+Get-FileHash .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.2.exe -Algorithm SHA256
 ```

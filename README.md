@@ -21,7 +21,7 @@ Windows 10 / 11 · GUI in **Arabic + English** · no installation required.
 
 | What | Link |
 |------|------|
-| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.1.exe` (2.1 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.2.1/UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.1.exe) |
+| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.2.exe` (2.1 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.2.2/UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.2.exe) |
 | Portable `.zip` (no install) and full source | [releases page](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest) |
 | Always the newest release | <https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest> |
 
@@ -155,7 +155,7 @@ module and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (for the installer 
 
 ```powershell
 # compile the exe and cut a release (Project.zip + Portable.zip + Setup.exe + record)
-.\Build-Release.ps1 -Version 1.2.1 -Notes "..." -Recompile
+.\Build-Release.ps1 -Version 1.2.2 -Notes "..." -Recompile
 ```
 
 Each release is stored under `releases\v<version>\` in **three forms**:
@@ -195,8 +195,8 @@ certificate), sign the built binaries yourself:
 
 ```powershell
 .\Sign.ps1 -List                                    # show usable certificates
-.\Sign.ps1 -Path .\releases\v1.2.1\*.exe -Thumbprint <sha1>
-.\Sign.ps1 -Verify -Path .\releases\v1.2.1\*.exe     # check a release
+.\Sign.ps1 -Path .\releases\v1.2.2\*.exe -Thumbprint <sha1>
+.\Sign.ps1 -Verify -Path .\releases\v1.2.2\*.exe     # check a release
 ```
 
 ---
@@ -241,7 +241,7 @@ verification instructions are in **[CODE-SIGNING.md](CODE-SIGNING.md)**.
 Verify a downloaded file:
 
 ```powershell
-Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.1.exe |
+Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.2.exe |
     Format-List Status, SignerCertificate
 ```
 
