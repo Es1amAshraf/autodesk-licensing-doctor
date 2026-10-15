@@ -145,7 +145,11 @@ Section 'Official components'
 
 # auto-detect in -InstallerDir
 if ($InstallerDir -and (Test-Path -LiteralPath $InstallerDir)) {
-    $files = @(Get-ChildItem -LiteralPath $InstallerDir -File -Include '*.exe','*.msi' -Recurse -ErrorAction SilentlyContinue)
+    # Get-ChildItem ignores a name -Include filter when the path comes from
+    # -LiteralPath, which would let any file in this folder match the name
+    # patterns below, so the extension filter is explicit instead.
+    $files = @(Get-ChildItem -LiteralPath $InstallerDir -File -Recurse -ErrorAction SilentlyContinue |
+               Where-Object { $_.Extension -in '.exe','.msi' })
     if (-not $AdlsInstaller)    { $AdlsInstaller    = ($files | Where-Object { $_.Name -match 'Licensing|AdskLicensing|DesktopLicensing' } | Select-Object -First 1).FullName }
     if (-not $AdSsoInstaller)   { $AdSsoInstaller   = ($files | Where-Object { $_.Name -match 'AdSSO|SingleSignOn|SSO' }             | Select-Object -First 1).FullName }
     if (-not $GenuineInstaller) { $GenuineInstaller = ($files | Where-Object { $_.Name -match 'Genuine' }                            | Select-Object -First 1).FullName }

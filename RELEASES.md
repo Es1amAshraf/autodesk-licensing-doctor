@@ -1,5 +1,48 @@
 ﻿# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases
 
+## v1.2.4  (2026-10-15 21:04:19)
+
+Diagnostic accuracy release.
+
+Fixed (a customer machine reported 322 failures that were not real):
+- The signature scan asked Windows for the signature of *every* file in the
+  licensing folders, including JSON, fonts and images, and reported each one as
+  "INVALID signature - patched/cracked". Data files carry no signature at all,
+  so a healthy machine showed hundreds of failures. Only real binaries are
+  scanned now, and only a broken signature counts as patched.
+- The same PowerShell pitfall produced false "license-server binary found"
+  warnings for normal folders (Adlm, VBAServer, AdskLicensing...).
+- "AdSSO component not found" no longer warns on machines where the sign-in
+  client lives inside AdskLicensing (current ADLS releases).
+- "AdskLicensingAgent not found" was wrong: the agent is not a Windows service.
+
+New checks:
+- AdskLicensing (ADLS) and AdSSO build reporting.
+- ADLS "Current" link: warns when it points at an older build than the one
+  installed (a known cause of "Licensing error - An error occurred").
+- Services whose binaries no longer exist (leftover Network License Manager).
+- IFEO execution blockers (a Debugger value that stops Autodesk executables).
+
+Cleanup:
+- The legacy ADLM licence cache (ProgramData\Autodesk\Adlm with
+  ProductInformation.pit) is now reset, and the backup layer captures it first,
+  so UNDO still restores the previous state.
+
+Reporting:
+- The verdict now names the step that fixes the machine (cleanup / repair /
+  product reinstall) instead of calling everything "needs cleaning".
+- Problems and warnings are grouped by area in the console, the text and the
+  HTML report, and a machine without Autodesk installed is no longer reported as
+  broken.
+
+Tests:
+- A Pester suite (preview purity, backup + UNDO, report validity, ADLS baseline,
+  regression guards for the bugs above) runs on every push.
+
+- `AdskDoctor-v1.2.4-Project.zip`  -  0.12 MB  -  SHA256 `CB84238FE20AF05935BEF0F739F47DC55E2363CB25D51BF8AE8AD1634AF6C45D`
+- `AdskDoctor-v1.2.4-Portable.zip`  -  0.13 MB  -  SHA256 `E9FCB9BCE1B03042A294AEBED5F26F5E0ACF2A3BB188E503AA5CCCB86BC7E142`
+- `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.4.exe`  -  2.1 MB  -  SHA256 `03610B0E51E075775B934CAE8DC662BFFEE01F32576322249647DDCA257F263D`
+
 ## v1.2.3  (2026-10-15 20:05:06)
 
 Fixed the Roll back (Undo) picker, which failed to open and showed a cascade of

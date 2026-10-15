@@ -7,6 +7,7 @@
       - FLEXlm license-server leftovers
       - hosts hijacks + firewall blocks
       - crack-scheduled tasks & startup entries
+      - execution blockers (IFEO Debugger keys on Autodesk services)
       - Autodesk installer cache (ODIS) -> "error while preparing installation"
       - suspicious environment variables
       - a broken system clock -> "Clock Error"
@@ -176,7 +177,11 @@ Section 'Crack leftovers'
 $leftovers = @()
 foreach ($p in @(
     (Join-Path $env:ProgramData 'FLEXnet'),
-    (Join-Path $env:ProgramData 'Autodesk\Web Services\Adlm'))) {
+    (Join-Path $env:ProgramData 'Autodesk\Web Services\Adlm'),
+    # The legacy ADLM licence cache (ProductInformation.pit). ADLS ignores it,
+    # a patched copy is a classic non-genuine activation leftover, and the
+    # backup layer restores it if the clean-up is rolled back.
+    (Join-Path $env:ProgramData 'Autodesk\Adlm'))) {
     if (Test-Path -LiteralPath $p) { $leftovers += $p }
 }
 foreach ($p in $leftovers) { $pp = $p; Step ("Remove leftover folder {0}" -f $p) { Remove-Item -LiteralPath $pp -Recurse -Force } }
@@ -240,6 +245,31 @@ foreach ($k in $regKeys) {
     }
 }
 if (-not $found) { Write-Host '  no cracked license-server keys' -ForegroundColor DarkGray }
+
+# execution blockers: a "Debugger" value squeezed onto Autodesk processes/services,
+# which stops ADLS / the Genuine Service / the product from ever starting.
+$ifeoRoots = @(
+    'Registry::HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options',
+    'Registry::HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows NT\CurrentVersion\Image File Execution Options'
+)
+$ifeoFound = $false
+foreach ($ir in $ifeoRoots) {
+    if (-not (Test-Path -LiteralPath $ir)) { continue }
+    foreach ($k in @(Get-ChildItem -LiteralPath $ir -ErrorAction SilentlyContinue)) {
+        $dbg = $null
+        try { $dbg = [string](Get-ItemProperty -LiteralPath $k.PSPath -Name 'Debugger' -ErrorAction Stop).Debugger } catch {}
+        if (-not $dbg) { continue }
+        $name = $k.PSChildName
+        if ($name -match 'adsk|autodesk|genuine|flexnet|flexlm|licens') {
+            $ifeoFound = $true; $kp = $k.PSPath
+            Step ("Remove execution blocker IFEO\{0} -> {1}" -f $name, $dbg) { Remove-Item -LiteralPath $kp -Recurse -Force }
+        } elseif ($dbg -match '\\appdata\\|\\temp\\|\\users\\|\\downloads\\') {
+            # someone else's hook - report it, never touch it
+            Write-Host ("  note: unrelated execution hook IFEO\{0} -> {1} (left alone)" -f $name, $dbg) -ForegroundColor DarkGray
+        }
+    }
+}
+if (-not $ifeoFound) { Write-Host '  no Autodesk execution blockers' -ForegroundColor DarkGray }
 
 # ---------------------------------------------------------------------------
 # 9. Autodesk installer cache (ODIS)

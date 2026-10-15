@@ -21,9 +21,19 @@ Windows 10 / 11 · GUI in **Arabic + English** · no installation required.
 
 | What | Link |
 |------|------|
-| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.3.exe` (2.1 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.2.3/UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.3.exe) |
+| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.4.exe` (2.1 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.2.4/UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.4.exe) |
 | Portable `.zip` (no install) and full source | [releases page](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest) |
 | Always the newest release | <https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest> |
+
+SHA256 of the files above (also in `SHA256SUMS.txt` on the release page):
+
+```text
+03610B0E51E075775B934CAE8DC662BFFEE01F32576322249647DDCA257F263D  UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.4.exe
+E9FCB9BCE1B03042A294AEBED5F26F5E0ACF2A3BB188E503AA5CCCB86BC7E142  AdskDoctor-v1.2.4-Portable.zip
+CB84238FE20AF05935BEF0F739F47DC55E2363CB25D51BF8AE8AD1634AF6C45D  AdskDoctor-v1.2.4-Project.zip
+```
+
+See [Verify your download](#verify-your-download).
 
 The installer adds a desktop shortcut and an uninstaller, and is branded with the
 UNLOCK DIGITAL logo. See [Quick start](#quick-start) below.
@@ -70,6 +80,24 @@ applicable laws in your jurisdiction.
 **Safety model:** backup always runs first, cleanup/repair do **nothing** until
 you explicitly pass `-Apply`, and every change is reversible through the
 backup's `UNDO.ps1`.
+
+---
+
+## Which problem does it fix?
+
+| What the customer sees | What the toolkit checks / does |
+|------------------------|-------------------------------|
+| **"Licensing error — An error occurred"** (AutoCAD/Revit 2020+) | Verifies the whole sign-in licensing stack (ADLS build, service state, licensing agent, identity/SSO component), flags a stale or half-updated licensing service, resets leftover licence caches and reinstalls the official components in the Repair phase. |
+| **"Connection Lost to Autodesk Desktop Licensing Service"** | ADLS presence, state, start-up mode and the signature of its service binary; an old or replaced build is reported and the Repair phase installs the official one. |
+| **Sign-in window never opens / sign-in fails** | AdSSO + identity component, `hosts` hijacks, firewall blocks, WinHTTP proxy, DNS and connectivity to `accounts.autodesk.com`. |
+| **Ask for a serial number / activation screen** | Legacy ADLM licence cache (`ProductInformation.pit`, `ProgramData\FLEXnet`) left by a non-genuine activation — the Cleanup phase resets it so the product asks for a normal sign-in again. |
+| **"The license manager is not functioning"** | Leftover **Network License Manager** (service pointing at deleted binaries) — reported as a stale leftover and removed by Cleanup (`-KeepNLM` keeps it). |
+| **Product does not start at all, no error** | **IFEO execution blockers** — a `Debugger` value squeezing an Autodesk executable. Cleanup removes them; the Repair phase cannot succeed while one is in place. |
+| **Error 1603 / "unable to install"** | Orphaned uninstall entries, VC++ 2015–2022 runtime, TEMP, ODIS installer cache, antivirus / Controlled Folder Access. |
+| **Activation refused, clock errors** | Windows Time service and system clock drift against internet time. |
+
+The diagnostic always states a verdict and groups the problems by area, so a
+report with hundreds of findings still reads as a short list of things to do.
 
 ---
 
@@ -120,16 +148,21 @@ powershell -ExecutionPolicy Bypass -File .\Repair.ps1 -Apply
 
 System readiness · clock / time sync ("Clock Error") · installer health
 ("Error 1603") · `hosts` hijacking · firewall blocks · Autodesk/FlexNet
-services · deep Authenticode scan of `AdskLicensing`/`AdSSO` · legacy
-**Network License Manager** · ODIS installer cache, antivirus and logs
-("Unable to install") · **ADLS** connection health ("Connection Lost") ·
-product binaries · **leftovers of non-genuine patches** (`ProgramData\FLEXnet`,
-`ProductInformation.pit`, `crack`/`keygen`/`adskflex`/`lmgrd` file names) · registry
-hijacks · environment variables · scheduled tasks · startup entries · running
-processes · fake local license servers (FLEXlm ports) · connectivity to
-Autodesk endpoints + DNS hijack detection · WinHTTP proxy.
+services (including services that point at deleted binaries) · **IFEO execution
+blockers** that stop Autodesk executables from starting · deep Authenticode scan
+of the `AdskLicensing` / `AdSSO` **binaries** (patched binaries are detected by
+their broken signature) · **ADLS** build, `Current` link, licensing agent and
+**AdSSO** presence ("Connection Lost", "Licensing error") · legacy **Network
+License Manager** · ODIS installer cache, antivirus and logs ("Unable to
+install") · product binaries · **leftovers of non-genuine patches**
+(`ProgramData\FLEXnet`, the legacy ADLM cache with `ProductInformation.pit`,
+`crack`/`keygen`/`adskflex`/`lmgrd` file names) · registry hijacks ·
+environment variables · scheduled tasks · startup entries · running processes ·
+fake local license servers (FLEXlm ports) · connectivity to Autodesk endpoints +
+DNS hijack detection · WinHTTP proxy.
 
-Every finding is tagged `OK` / `WARN` / `FAIL` / `info` with a final verdict.
+Every finding is tagged `OK` / `WARN` / `FAIL` / `info`, a final verdict names
+the step to run, and (in the HTML report) the problems are grouped by area.
 
 ---
 
@@ -142,7 +175,7 @@ machines, so the backup is layered — layers 2–5 do not depend on VSS:
 |-------|------|-----------|
 | 1 | System Restore point (best effort) | yes |
 | 2 | `.reg` export of every touched key | no |
-| 3 | File/folder copies (hosts, AdskLicensing, AdSSO, FLEXnet, NLM) | no |
+| 3 | File/folder copies (hosts, AdskLicensing, AdSSO, FLEXnet, legacy ADLM cache, NLM) | no |
 | 4 | State snapshots (services, firewall, tasks, env) | no |
 | 5 | `UNDO.ps1` that reverses layers 2–4 | no |
 
@@ -155,7 +188,7 @@ module and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (for the installer 
 
 ```powershell
 # compile the exe and cut a release (Project.zip + Portable.zip + Setup.exe + record)
-.\Build-Release.ps1 -Version 1.2.3 -Notes "..." -Recompile
+.\Build-Release.ps1 -Version 1.2.4 -Notes "..." -Recompile
 ```
 
 Each release is stored under `releases\v<version>\` in **three forms**:
@@ -195,8 +228,8 @@ certificate), sign the built binaries yourself:
 
 ```powershell
 .\Sign.ps1 -List                                    # show usable certificates
-.\Sign.ps1 -Path .\releases\v1.2.3\*.exe -Thumbprint <sha1>
-.\Sign.ps1 -Verify -Path .\releases\v1.2.3\*.exe     # check a release
+.\Sign.ps1 -Path .\releases\v1.2.4\*.exe -Thumbprint <sha1>
+.\Sign.ps1 -Verify -Path .\releases\v1.2.4\*.exe     # check a release
 ```
 
 ---
@@ -241,7 +274,74 @@ verification instructions are in **[CODE-SIGNING.md](CODE-SIGNING.md)**.
 Verify a downloaded file:
 
 ```powershell
-Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.3.exe |
+Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.4.exe |
+    Format-List Status, SignerCertificate
+```
+
+---
+
+## FAQ
+
+**Does this activate or license Autodesk software for me?**
+No. It removes the leftovers of a non-genuine patch and repairs the *official*
+licensing components. A genuine Autodesk subscription (sign-in / single-user) is
+still required — the product must be able to sign in normally afterwards.
+
+**Will it damage a healthy machine?**
+Cleanup and Repair are **preview-only** until you pass `-Apply`, the backup runs
+first, and `UNDO.ps1` reverses every change. Run the diagnostic first; on a clean
+machine the report is short and nothing needs cleaning.
+
+**Why does the report say FAIL on a machine that looks fine?**
+Read the "Problems by area" block: a `FAIL` means a check that blocks official
+licensing (missing/broken licensing service, `hosts` hijack, IFEO blocker,
+patched binary). Anything that is merely unusual is `WARN`. If a customer ever
+saw a wall of failures from a single area, that was a bug in this toolkit — the
+test suite now guards against it.
+
+**A product now says "Licensing error — An error occurred" and the tool did not
+fix it. What next?**
+A cleanup cannot repair binaries that a patch replaced, and a
+product will not license itself. Repair or reinstall that product from the
+official installer, reboot, then sign in. If it still fails, the licensing
+service log (see below) says why.
+
+**Where are the licensing logs?**
+`%ProgramData%\Autodesk\AdskLicensingService` and
+`%LOCALAPPDATA%\Autodesk\Logs` — the diagnostic lists the newest ones it finds.
+
+**Is it signed? Why does Windows show "Unknown Publisher"?**
+Code signing is in progress through [SignPath Foundation](https://signpath.org)
+for open-source projects (see [CODE-SIGNING.md](CODE-SIGNING.md)). Until the
+signed build is published, verify the **SHA256** of your download before running
+it.
+
+**Does it work on Windows 7 / macOS?**
+No. Windows 10 and Windows 11 only, and only the Windows Autodesk products.
+
+**Can I run it unattended on many machines?**
+Yes — the engine is a script: `Clean.ps1 -Apply` and `Repair.ps1 -Apply` are
+non-interactive, and the diagnostic can export JSON for your ticket system.
+
+**Does it send anything anywhere?**
+No. See [PRIVACY.md](PRIVACY.md).
+
+---
+
+## Verify your download
+
+Every release ships a `SHA256SUMS.txt` next to the binaries. To check what you
+downloaded:
+
+```powershell
+Get-FileHash .\UNLOCK-DIGITAL-AdskDoctor-Setup-<version>.exe -Algorithm SHA256
+```
+
+Compare the value with `SHA256SUMS.txt` on the release page. Once the signed
+build is published you can also check the signature:
+
+```powershell
+Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-<version>.exe |
     Format-List Status, SignerCertificate
 ```
 

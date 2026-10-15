@@ -102,6 +102,8 @@ $regKeys = @(
     'HKCU\SOFTWARE\Autodesk',
     'HKLM\SOFTWARE\FLEXlm License Manager',
     'HKLM\SOFTWARE\WOW6432Node\FLEXlm License Manager',
+    'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options',
+    'HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows NT\CurrentVersion\Image File Execution Options',
     'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run',
     'HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run',
     'HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
@@ -140,6 +142,7 @@ $folderTargets = @(
     (Join-Path $commonFiles 'AdSSO'),
     (Join-Path $commonFiles 'Network License Manager'),
     (Join-Path $env:ProgramData 'FLEXnet'),
+    (Join-Path $env:ProgramData 'Autodesk\Adlm'),
     'C:\Autodesk\Network License Manager'
 )
 foreach ($src in $folderTargets) {

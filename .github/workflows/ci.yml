@@ -3,6 +3,7 @@ name: CI
 # Fast sanity checks on every push / pull request:
 #   - every PowerShell file parses
 #   - PSScriptAnalyzer reports no errors
+#   - the test suite passes (preview purity, backup/UNDO, report validity)
 #   - the SignPath artifact configurations are well-formed
 #   - the build script is present and self-consistent
 #
@@ -52,6 +53,26 @@ jobs:
             throw "$($res.Count) PSScriptAnalyzer error(s)"
           }
           Write-Host "No analyzer errors."
+
+      - name: Unit tests (Pester)
+        shell: pwsh
+        run: |
+          # The suite launches the toolkit with Windows PowerShell 5.1 (that is
+          # what the released exe runs on), and the checks that touch Program
+          # Files / ProgramData run because a runner is elevated - a developer
+          # shell skips them.
+          if (-not (Get-Module -ListAvailable Pester | Where-Object { $_.Version -ge [version]'5.0.0' })) {
+            Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+            Install-Module Pester -Scope CurrentUser -MinimumVersion 5.0.0 -Force -SkipPublisherCheck
+          }
+          Import-Module Pester -MinimumVersion 5.0
+          $cfg = New-PesterConfiguration
+          $cfg.Run.Path = '.\tests'
+          $cfg.Run.PassThru = $true
+          $cfg.Output.Verbosity = 'Detailed'
+          $r = Invoke-Pester -Configuration $cfg
+          if ($r.FailedCount -gt 0) { throw "$($r.FailedCount) test(s) failed" }
+          Write-Host "$($r.PassedCount) test(s) passed, $($r.SkippedCount) skipped."
 
       - name: Build the release (dry run)
         shell: pwsh

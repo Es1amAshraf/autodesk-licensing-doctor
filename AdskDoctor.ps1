@@ -127,38 +127,70 @@ function Test-AutodeskSigned {
     switch ($sig.Status) {
         'Valid' {
             if ($subject -match 'Autodesk') {
-                Add-Finding OK 'Files' ("Genuine (Autodesk-signed): {0}" -f $Label) $FilePath
+                Add-Finding OK 'Signatures' ("Genuine (Autodesk-signed): {0}" -f $Label) $FilePath
             } else {
-                Add-Finding WARN 'Files' ("Signed but not by Autodesk: {0}" -f $Label) ($FilePath + ' | ' + $subject)
+                Add-Finding WARN 'Signatures' ("Signed but not by Autodesk: {0}" -f $Label) ($FilePath + ' | ' + $subject)
             }
         }
-        'NotSigned' {
+        # A file with no signature at all reports NotSigned for a binary and
+        # UnknownError for a plain data file - neither one means "tampered".
+        { $_ -in 'NotSigned','UnknownError' } {
             $sev = if ($Strict) { 'BAD' } else { 'WARN' }
-            Add-Finding $sev 'Files' ("UNSIGNED ({0}): {1}" -f $(if($Strict){'expected Autodesk signature'}else{'review'}), $Label) $FilePath
+            Add-Finding $sev 'Signatures' ("UNSIGNED ({0}): {1}" -f $(if($Strict){'expected Autodesk signature'}else{'review'}), $Label) $FilePath
+        }
+        # This one is real: the file carries a signature that no longer matches
+        # its bytes, which is what a hex-edited (cracked) binary looks like.
+        'HashMismatch' {
+            Add-Finding BAD 'Signatures' ("SIGNATURE INVALID [patched/cracked]: {0}" -f $Label) $FilePath
+        }
+        # The signature exists but the chain cannot be validated - usually a
+        # missing/removed root CA or an offline machine, not a crack.
+        'NotTrusted' {
+            Add-Finding WARN 'Signatures' ("Signature could not be trusted [{0}]: {1}" -f $sig.Status, $Label) ($FilePath + ' - check the certificate chain / internet access')
         }
         default {
-            Add-Finding BAD 'Files' ("SIGNATURE INVALID [{0}] - patched/cracked: {1}" -f $sig.Status, $Label) $FilePath
+            Add-Finding WARN 'Signatures' ("Signature could not be checked [{0}]: {1}" -f $sig.Status, $Label) $FilePath
         }
     }
 }
 
-# Scan every exe/dll in a folder; report bad signatures.
+# Authenticode only ever covers real binaries, so a folder scan has to look at
+# binaries and nothing else. Get-ChildItem SILENTLY IGNORES -Include when it is
+# combined with -LiteralPath, which made an earlier release scan every JSON,
+# font and PNG in the licensing folder and report each one as "INVALID
+# signature" (a customer saw 322 of those on a healthy machine), so the file
+# list is filtered explicitly here.
+$script:SignatureExtensions = @(
+    '.exe','.dll','.sys','.ocx','.cpl','.msi','.msp','.drv','.ax','.scr','.com'
+)
+
 function Scan-FolderSignatures {
     param([string]$Root, [string]$Tag, [switch]$Strict)
     if (-not (Test-Path -LiteralPath $Root)) { return }
-    $files = Get-ChildItem -LiteralPath $Root -Recurse -File -Include '*.exe','*.dll' -ErrorAction SilentlyContinue
-    $bad = 0
+    $files = @(Get-ChildItem -LiteralPath $Root -Recurse -File -ErrorAction SilentlyContinue |
+               Where-Object { $script:SignatureExtensions -contains $_.Extension.ToLowerInvariant() })
+    $checked  = 0
+    $bad      = 0
+    $unsigned = 0
     foreach ($f in $files) {
+        $checked++
         $sig = Get-AuthenticodeSignature -LiteralPath $f.FullName
-        if ($sig.Status -eq 'NotSigned') {
-            if ($Strict) { Add-Finding BAD 'Files' ("UNSIGNED in {0}: {1}" -f $Tag, $f.Name) $f.FullName; $bad++ }
-        } elseif ($sig.Status -ne 'Valid') {
-            Add-Finding BAD 'Files' ("INVALID signature in {0}: {1}" -f $Tag, $f.Name) $f.FullName
+        if ($sig.Status -in 'NotSigned','UnknownError') {
+            $unsigned++
+            if ($Strict) { Add-Finding BAD 'Signatures' ("UNSIGNED in {0}: {1}" -f $Tag, $f.Name) $f.FullName; $bad++ }
+        } elseif ($sig.Status -eq 'HashMismatch') {
+            Add-Finding BAD 'Signatures' ("PATCHED binary in {0}: {1} (its signature no longer matches)" -f $Tag, $f.Name) $f.FullName
             $bad++
+        } elseif ($sig.Status -ne 'Valid') {
+            Add-Finding WARN 'Signatures' ("Signature not trusted in {0}: {1} [{2}]" -f $Tag, $f.Name, $sig.Status) $f.FullName
         }
     }
     if ($bad -eq 0) {
-        Add-Finding OK 'Files' ("All binaries in {0} have valid signatures" -f $Tag)
+        if ($unsigned -gt 0) {
+            Add-Finding INFO 'Signatures' ("{0} unsigned binary/binaries in {1} (no signature - nothing patched)" -f $unsigned, $Tag) ''
+        } else {
+            Add-Finding OK 'Signatures' ("All {0} binaries in {1} carry a valid signature" -f $checked, $Tag)
+        }
     }
 }
 
@@ -293,6 +325,11 @@ try {
     if ($orphans -gt 0) { Add-Finding WARN 'Installer' ('{0} orphaned Autodesk uninstall entries (failed-install leftovers)' -f $orphans) 'A common cause of error 1603' }
 } catch {}
 
+# The licensing checks below only mean something when Autodesk is actually
+# installed: on a clean machine a missing licensing service is not a defect, so
+# those findings stay informational instead of raising a failure.
+$adskInstalled = (@($ak).Count -gt 0) -or (Test-Path -LiteralPath (Join-Path $env:ProgramFiles 'Autodesk'))
+
 # ===========================================================================
 # 1. Hosts file
 # ===========================================================================
@@ -351,12 +388,20 @@ try {
             if ($susp) {
                 Add-Finding $susp 'Services' ("Service '{0}' runs from a suspicious path" -f $s.Name) $exe
             }
+            # A service that survived the removal of its binaries (a leftover
+            # Network License Manager, for example) is a real leftover: it still
+            # starts at boot and can block a clean reinstall.
+            if ($exe -and -not (Test-Path -LiteralPath $exe)) {
+                Add-Finding WARN 'Services' ("Service '{0}' points to a missing file (stale leftover)" -f $s.Name) $exe
+            }
             if ($exe -and (Test-Path -LiteralPath $exe)) {
                 Test-AutodeskSigned -FilePath $exe -Label ("service {0}" -f $s.Name) -Strict
             }
         }
-    } else {
+    } elseif ($adskInstalled) {
         Add-Finding WARN 'Services' 'No Autodesk/FlexNet services found at all' 'Official products register ADLS/Access services'
+    } else {
+        Add-Finding INFO 'Services' 'No Autodesk/FlexNet services found' 'No Autodesk product is installed on this machine'
     }
 
     $adls = $svc | Where-Object { $_.Name -eq 'AdskLicensingService' }
@@ -364,12 +409,11 @@ try {
         if ($adls.State -eq 'Running') { Add-Finding OK 'Services' 'AdskLicensingService present and running' }
         else { Add-Finding WARN 'Services' ("AdskLicensingService present but State={0}" -f $adls.State) 'The product will show "Connection Lost to Autodesk Desktop Licensing Service"' }
         if ($adls.StartMode -eq 'Disabled') { Add-Finding WARN 'Services' 'AdskLicensingService start mode is Disabled' 'Set it to Automatic' }
-    } else {
+    } elseif ($adskInstalled) {
         Add-Finding BAD 'Services' 'AdskLicensingService (ADLS) is MISSING - single-user licensing cannot work' 'Causes "Desktop Licensing Service - Connection Lost" and licensing errors'
+    } else {
+        Add-Finding INFO 'Services' 'AdskLicensingService (ADLS) not installed' 'Nothing to license on this machine'
     }
-    # the agent component the app also talks to
-    $agent = $svc | Where-Object { $_.Name -match 'AdskLicensingAgent' }
-    if (-not $agent) { Add-Finding WARN 'Services' 'AdskLicensingAgent not found (part of the licensing stack)' '' }
 } catch {
     Add-Finding WARN 'Services' 'Could not enumerate services' $_.Exception.Message
 }
@@ -385,18 +429,113 @@ $adSSO = Join-Path $commonFiles 'AdSSO'
 if (Test-Path -LiteralPath $adskLicensingRoot) {
     $versions = @(Get-ChildItem -LiteralPath $adskLicensingRoot -Directory)
     if ($versions.Count -gt 0) {
-        Add-Finding INFO 'Files' ('AdskLicensing versions: ' + (($versions.Name) -join ', ')) $adskLicensingRoot
+        Add-Finding INFO 'Licensing' ('AdskLicensing versions: ' + (($versions.Name) -join ', ')) $adskLicensingRoot
         Scan-FolderSignatures -Root $adskLicensingRoot -Tag 'AdskLicensing'
-    } else { Add-Finding WARN 'Files' 'AdskLicensing folder exists but is empty' $adskLicensingRoot }
+    } else { Add-Finding WARN 'Licensing' 'AdskLicensing folder exists but is empty' $adskLicensingRoot }
+} elseif ($adskInstalled) {
+    Add-Finding BAD 'Licensing' 'AdskLicensing folder NOT found' ("Expected: " + $adskLicensingRoot)
 } else {
-    Add-Finding BAD 'Files' 'AdskLicensing folder NOT found' ("Expected: " + $adskLicensingRoot)
+    Add-Finding INFO 'Licensing' 'AdskLicensing is not installed' 'No Autodesk product is installed on this machine'
+}
+
+# --- ADLS version ----------------------------------------------------------
+# A cracked install often leaves an OLD AdskLicensing behind, and an old
+# licensing service is a common cause of single-user (sign-in) failures. The
+# baseline below is the first ADLS line that serves named-user licensing: an
+# older build cannot activate a subscription product and has to be updated with
+# the official installer (Repair step). It is a floor, not a target.
+$AdlsBaseline = [version]'10.0.0.0'
+$adlsVersion  = $null
+$versionIni   = Join-Path $adskLicensingRoot 'version.ini'
+if (Test-Path -LiteralPath $versionIni) {
+    $raw = Get-Content -LiteralPath $versionIni -Raw -ErrorAction SilentlyContinue
+    if ($raw -match '(\d+\.\d+\.\d+(?:\.\d+)?)') { $adlsVersion = $matches[1] }
+}
+if (-not $adlsVersion -and (Test-Path -LiteralPath $adskLicensingRoot)) {
+    # the version sub-folders are named after the version; otherwise ask the service exe
+    $dirs = @(Get-ChildItem -LiteralPath $adskLicensingRoot -Directory -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -match '^\d+(\.\d+)+$' } | Sort-Object { [version]$_.Name } -Descending)
+    if ($dirs.Count) {
+        $adlsVersion = $dirs[0].Name
+    } else {
+        $svcExe = @(Get-ChildItem -LiteralPath $adskLicensingRoot -Recurse -File -Filter 'AdskLicensingService.exe' -ErrorAction SilentlyContinue | Select-Object -First 1)
+        if ($svcExe.Count) { $adlsVersion = $svcExe[0].VersionInfo.FileVersion }
+    }
+}
+if ($adlsVersion) {
+    $adlsObj = $null
+    try { $adlsObj = [version]$adlsVersion } catch {}
+    if ($adlsObj -and $adlsObj -lt $AdlsBaseline) {
+        Add-Finding WARN 'Licensing' ("AdskLicensing (ADLS) is {0} - older than the {1} baseline" -f $adlsVersion, $AdlsBaseline) 'An old licensing service cannot serve single-user sign-in - run the Repair step to install the official ADLS'
+    } else {
+        Add-Finding INFO 'Licensing' ("AdskLicensing (ADLS) version: {0}" -f $adlsVersion) ''
+    }
+} elseif (Test-Path -LiteralPath $adskLicensingRoot) {
+    Add-Finding WARN 'Licensing' 'AdskLicensing (ADLS) version could not be determined' $adskLicensingRoot
+}
+
+# --- ADLS 'Current' junction ------------------------------------------------
+# ADLS keeps every installed build side by side and points 'Current' at the
+# active one. An interrupted licensing-service update can leave that junction on
+# an older build than the newest installed one - a known cause of the generic
+# "Licensing error - An error occurred".
+$curPath = Join-Path $adskLicensingRoot 'Current'
+if (Test-Path -LiteralPath $curPath) {
+    $numbered = @(Get-ChildItem -LiteralPath $adskLicensingRoot -Directory -ErrorAction SilentlyContinue |
+                  Where-Object { $_.Name -match '^\d+(\.\d+)+$' } | Sort-Object { [version]$_.Name })
+    try {
+        $curItem = Get-Item -LiteralPath $curPath -Force -ErrorAction Stop
+        $curName = Split-Path -Leaf (@($curItem.Target)[0] -replace '[\\/]+$', '')
+        if ($curName -and $numbered.Count -and ($numbered.Name -contains $curName) -and $curName -ne $numbered[-1].Name) {
+            Add-Finding WARN 'Licensing' ("AdskLicensing 'Current' points at {0} but {1} is installed" -f $curName, $numbered[-1].Name) ($curPath + ' - reinstall the official licensing service (Repair step)')
+        } elseif ($curName) {
+            Add-Finding INFO 'Licensing' ("AdskLicensing 'Current' -> {0}" -f $curName) $curPath
+        }
+    } catch {}
+}
+
+# --- licensing agent -------------------------------------------------------
+# The agent is NOT a Windows service in current ADLS releases: it is
+# AdskLicensingAgent.exe inside the AdskLicensing folder, started on demand.
+# Checking for a service of that name produced a false warning, so look for the
+# file (or the service, for very old releases).
+$agentFile = @(Get-ChildItem -LiteralPath $adskLicensingRoot -Recurse -File -Filter 'AdskLicensingAgent.exe' -ErrorAction SilentlyContinue | Select-Object -First 1)
+$agentSvc  = @(Get-CimInstance Win32_Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'AdskLicensingAgent' })
+if ($agentFile.Count) {
+    Add-Finding OK 'Licensing' 'Licensing agent present (AdskLicensingAgent.exe)' $agentFile[0].FullName
+} elseif ($agentSvc.Count) {
+    Add-Finding OK 'Licensing' ("Licensing agent present (service {0})" -f $agentSvc[0].Name) ''
+} elseif (Test-Path -LiteralPath $adskLicensingRoot) {
+    Add-Finding WARN 'Licensing' 'Licensing agent not found (AdskLicensingAgent)' 'Part of the ADLS stack - reinstall ADLS with the official installer'
 }
 
 if (Test-Path -LiteralPath $adSSO) {
-    Add-Finding OK 'Files' 'AdSSO (Single Sign-On) component present' $adSSO
+    Add-Finding OK 'Licensing' 'AdSSO (Single Sign-On) component present' $adSSO
+    # report the newest binary version found in the folder (names differ by release)
+    $ssoBest = $null
+    foreach ($e in @(Get-ChildItem -LiteralPath $adSSO -Recurse -File -Filter '*.exe' -ErrorAction SilentlyContinue)) {
+        $v = $null
+        try { $v = [version]$e.VersionInfo.FileVersion } catch {}
+        if ($v -and (-not $ssoBest -or $v -gt $ssoBest.Version)) {
+            $ssoBest = [pscustomobject]@{ Version = $v; Text = $e.VersionInfo.FileVersion; Path = $e.FullName; Name = $e.Name }
+        }
+    }
+    if ($ssoBest) { Add-Finding INFO 'Licensing' ("AdSSO version: {0} ({1})" -f $ssoBest.Text, $ssoBest.Name) $ssoBest.Path }
     Scan-FolderSignatures -Root $adSSO -Tag 'AdSSO'
+} elseif ($adskInstalled) {
+    # Newer releases ship the sign-in client inside the licensing service
+    # (AdskLicensingAgent holds SSOClient.config + AdSkIdentitySDK.config), so a
+    # missing standalone AdSSO folder is not a defect there - it was reported as
+    # a warning on machines that sign in perfectly well.
+    $ssoInAdls = @(Get-ChildItem -LiteralPath $adskLicensingRoot -Recurse -File -ErrorAction SilentlyContinue |
+                   Where-Object { $_.Name -in 'SSOClient.config','AdSkIdentitySDK.config' })
+    if ($ssoInAdls.Count) {
+        Add-Finding INFO 'Licensing' 'Standalone AdSSO not installed - sign-in is handled by AdskLicensing' $ssoInAdls[0].FullName
+    } else {
+        Add-Finding WARN 'Licensing' 'AdSSO component not found' ("Expected: " + $adSSO + ' - single-user sign-in needs it')
+    }
 } else {
-    Add-Finding WARN 'Files' 'AdSSO component not found' ("Expected: " + $adSSO)
+    Add-Finding INFO 'Licensing' 'AdSSO is not installed' 'No Autodesk product is installed on this machine'
 }
 
 # ===========================================================================
@@ -423,11 +562,12 @@ foreach ($np in $nlmPaths) {
         Add-Finding WARN 'NLM' ("Network License Manager present: {0}" -f $np) ("version: " + $ver)
     }
 }
-# license-server binaries in the shared folder
+# license-server binaries in the shared folder (see the -Include note above:
+# it is ignored with -LiteralPath, so the path is built with a wildcard)
 $shared = Join-Path ${env:ProgramFiles(x86)} 'Common Files\Autodesk Shared'
 $flex = @()
 if (Test-Path -LiteralPath $shared) {
-    $flex = @(Get-ChildItem -LiteralPath $shared -Recurse -Include 'adskflex.exe','lmgrd.exe' -ErrorAction SilentlyContinue | Select-Object -First 5)
+    $flex = @(Get-ChildItem -Path (Join-Path $shared '*') -Recurse -File -Include 'adskflex.exe','lmgrd.exe' -ErrorAction SilentlyContinue | Select-Object -First 5)
     foreach ($f in $flex) { Add-Finding WARN 'NLM' ("License-server binary found: {0}" -f $f.Name) $f.FullName }
 }
 if ($nlmFound -eq 0 -and $flex.Count -eq 0) {
@@ -519,12 +659,16 @@ if (Test-Path -LiteralPath $flexnet) {
 foreach ($path in @(
     (Join-Path $env:ProgramData 'Autodesk\CLM\LGS'),
     (Join-Path $env:ProgramData 'Autodesk\Web Services'),
+    (Join-Path $env:ProgramData 'Autodesk\Adlm'),
     'C:\Autodesk')) {
     if (Test-Path -LiteralPath $path) { Add-Finding INFO 'Leftovers' ("Found: {0}" -f $path) '' }
 }
 
+# The legacy ADLM licence cache. A patched ProductInformation.pit is one of the
+# classic non-genuine activation leftovers, and ADLS ignores the file, so the
+# Cleanup step resets it (the backup restores it if you roll back).
 $pit = @(Get-ChildItem -LiteralPath $env:ProgramData -Filter 'ProductInformation.pit' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 5)
-foreach ($f in $pit) { Add-Finding WARN 'Leftovers' ('ProductInformation.pit (verify not patched) - ' + $f.LastWriteTime) $f.FullName }
+foreach ($f in $pit) { Add-Finding WARN 'Leftovers' ('ProductInformation.pit - legacy licence cache (the Cleanup step resets it) - ' + $f.LastWriteTime) $f.FullName }
 
 # suspicious file names inside Autodesk trees
 $suspName = 'crack|keygen|licgen|xforce|xf-|adskflex|lmgrd|_orig|\.bak$|\.old$'
@@ -535,6 +679,37 @@ foreach ($root in @($commonFiles, $productRoot)) {
         foreach ($h in $hits) { Add-Finding BAD 'Leftovers' ("Suspicious file name: {0}" -f $h.Name) $h.FullName }
     }
 }
+
+# ===========================================================================
+# 6b. Image File Execution Options (IFEO) - execution blockers
+#     A very common crack side effect: squeeze a "Debugger" value onto
+#     AdskLicensingService.exe, the Genuine Service or a product exe. Windows
+#     then launches something else (or nothing) instead, so the official
+#     licensing stack can never start - and the Repair step cannot fix it
+#     while the block is in place.
+# ===========================================================================
+Write-Section 'Execution blockers (IFEO)'
+$ifeoRoots = @(
+    'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options',
+    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows NT\CurrentVersion\Image File Execution Options'
+)
+$ifeoSeen = 0
+foreach ($ifeoRoot in $ifeoRoots) {
+    if (-not (Test-Path -LiteralPath $ifeoRoot)) { continue }
+    foreach ($k in @(Get-ChildItem -LiteralPath $ifeoRoot -ErrorAction SilentlyContinue)) {
+        $dbg = $null
+        try { $dbg = [string](Get-ItemProperty -LiteralPath $k.PSPath -Name 'Debugger' -ErrorAction Stop).Debugger } catch {}
+        if (-not $dbg) { continue }
+        $autodeskish = $k.PSChildName -match 'adsk|autodesk|genuine|flexnet|flexlm|licens'
+        $suspicious  = Get-PathSuspicion $dbg
+        if ($autodeskish -or $suspicious) {
+            $sev = if ($autodeskish) { 'BAD' } else { 'WARN' }
+            Add-Finding $sev 'IFEO' ("Execution blocked via Debugger: {0}" -f $k.PSChildName) $dbg
+            $ifeoSeen++
+        }
+    }
+}
+if ($ifeoSeen -eq 0) { Add-Finding OK 'IFEO' 'No Autodesk execution blockers (IFEO Debugger keys)' }
 
 # ===========================================================================
 # 7. Registry
@@ -728,9 +903,26 @@ $badCount  = @($script:Findings | Where-Object { $_.Status -eq 'BAD'  }).Count
 $warnCount = @($script:Findings | Where-Object { $_.Status -eq 'WARN' }).Count
 $okCount   = @($script:Findings | Where-Object { $_.Status -eq 'OK'   }).Count
 
-$verdict = if ($badCount -gt 0) { 'Machine has non-genuine leftovers -> needs cleaning.' }
-           elseif ($warnCount -gt 0) { 'Mostly fine; review the warnings.' }
-           else { 'Looks genuine and healthy.' }
+# One patched folder can raise hundreds of findings, and a wall of red rows says
+# nothing about what to DO. Group the problems by area, then let the verdict name
+# the step that actually fixes them.
+$badByCat  = @($script:Findings | Where-Object { $_.Status -eq 'BAD'  } | Group-Object Category | Sort-Object Count -Descending)
+$warnByCat = @($script:Findings | Where-Object { $_.Status -eq 'WARN' } | Group-Object Category | Sort-Object Count -Descending)
+
+function Get-AreaCount {
+    param([string[]]$Names)
+    [int]($badByCat | Where-Object { $Names -contains $_.Name } | Measure-Object -Property Count -Sum).Sum
+}
+$licBad   = Get-AreaCount @('Licensing','Services')
+$crackBad = Get-AreaCount @('Hosts','Firewall','IFEO','Registry','Leftovers','NLM','Tasks','Startup','Processes','Environment')
+$sigBad   = Get-AreaCount @('Signatures')
+
+$verdict =
+    if ($licBad -gt 0)       { "Official licensing stack needs repair ($licBad problem(s)) -> run the Repair step." }
+    elseif ($crackBad -gt 0) { "Non-genuine leftovers found ($crackBad) -> run the Cleanup step." }
+    elseif ($sigBad -gt 0)   { "Found $sigBad patched or unrecognised file(s). A cleanup cannot repair those - the product has to be repaired or reinstalled from the official installer." }
+    elseif ($warnCount -gt 0){ 'Mostly fine; review the warnings.' }
+    else                     { 'Looks genuine and healthy.' }
 $verdictColor = if ($badCount -gt 0) { 'Red' } elseif ($warnCount -gt 0) { 'Yellow' } else { 'Green' }
 
 Write-Host ''
@@ -740,6 +932,16 @@ Write-Host '============================================================' -Foreg
 Write-Host ("   Problems (FAIL) : {0}" -f $badCount)  -ForegroundColor $(if ($badCount) {'Red'} else {'Green'})
 Write-Host ("   Warnings (WARN) : {0}" -f $warnCount) -ForegroundColor $(if ($warnCount) {'Yellow'} else {'Green'})
 Write-Host ("   Healthy  ( OK ) : {0}" -f $okCount)  -ForegroundColor Green
+if ($badByCat.Count) {
+    Write-Host ''
+    Write-Host '   Problems by area:' -ForegroundColor Red
+    foreach ($g in $badByCat) { Write-Host ("      {0,-15} {1}" -f $g.Name, $g.Count) -ForegroundColor Red }
+}
+if ($warnByCat.Count) {
+    Write-Host ''
+    Write-Host '   Warnings by area:' -ForegroundColor Yellow
+    foreach ($g in $warnByCat) { Write-Host ("      {0,-15} {1}" -f $g.Name, $g.Count) -ForegroundColor Yellow }
+}
 Write-Host ''
 Write-Host ("   VERDICT: {0}" -f $verdict) -ForegroundColor $verdictColor
 Write-Host ''
@@ -754,12 +956,14 @@ if ($Export) {
 
         if ($Json) {
             [pscustomobject]@{
-                Computer = $env:COMPUTERNAME
-                Date     = (Get-Date).ToString('s')
-                Admin    = $isAdmin
-                Summary  = [pscustomobject]@{ Fail = $badCount; Warn = $warnCount; Ok = $okCount }
-                Verdict  = $verdict
-                Findings = $script:Findings
+                Computer   = $env:COMPUTERNAME
+                Date       = (Get-Date).ToString('s')
+                Admin      = $isAdmin
+                Summary    = [pscustomobject]@{ Fail = $badCount; Warn = $warnCount; Ok = $okCount }
+                FailByArea = $badByCat
+                WarnByArea = $warnByCat
+                Verdict    = $verdict
+                Findings   = $script:Findings
             } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $Export -Encoding UTF8
         }
         elseif ($Html) {
@@ -769,9 +973,16 @@ if ($Export) {
                 $cls = @{ OK='ok'; WARN='warn'; BAD='bad'; INFO='info' }[$f.Status]
                 $rows += "<tr class='$cls'><td>$($f.Status)</td><td>$(HtmlEnc $f.Category)</td><td>$(HtmlEnc $f.Message)</td><td>$(HtmlEnc $f.Detail)</td></tr>`n"
             }
+            # a short "what to fix first" block above the (possibly huge) detail list
+            $areaRows = ''
+            foreach ($g in $badByCat)  { $areaRows += "<tr class='bad'><td>FAIL</td><td>$(HtmlEnc $g.Name)</td><td>$($g.Count)</td></tr>`n" }
+            foreach ($g in $warnByCat) { $areaRows += "<tr class='warn'><td>WARN</td><td>$(HtmlEnc $g.Name)</td><td>$($g.Count)</td></tr>`n" }
+            $areaBlock = if ($areaRows) {
+                "<h3>Problems by area</h3>`n<table style='width:auto'><thead><tr><th>Status</th><th>Area</th><th>Count</th></tr></thead><tbody>`n$areaRows</tbody></table>"
+            } else { '' }
             $htmlDoc = @"
 <!DOCTYPE html><html><head><meta charset='utf-8'>
-<title>AkdskDoctor report - $env:COMPUTERNAME</title>
+<title>AdskDoctor report - $env:COMPUTERNAME</title>
 <style>
  body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#222}
  h1{font-size:20px} .sum span{display:inline-block;padding:6px 12px;border-radius:6px;margin-right:8px;color:#fff}
@@ -788,6 +999,7 @@ if ($Export) {
 <b>Admin:</b> $isAdmin</p>
 <p class='sum'><span class='bad'>FAIL: $badCount</span><span class='warn'>WARN: $warnCount</span><span class='ok'>OK: $okCount</span></p>
 <p><b>Verdict:</b> $(HtmlEnc $verdict)</p>
+$areaBlock
 <table><thead><tr><th>Status</th><th>Category</th><th>Finding</th><th>Detail</th></tr></thead>
 <tbody>
 $rows
@@ -801,9 +1013,11 @@ $rows
                 "Computer : $env:COMPUTERNAME",
                 "Date     : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')",
                 "Summary  : FAIL=$badCount WARN=$warnCount OK=$okCount",
-                "Verdict  : $verdict",
-                ('-' * 60)
+                "Verdict  : $verdict"
             )
+            foreach ($g in $badByCat)  { $lines += ("Fail area: {0} ({1})" -f $g.Name, $g.Count) }
+            foreach ($g in $warnByCat) { $lines += ("Warn area: {0} ({1})" -f $g.Name, $g.Count) }
+            $lines += ('-' * 60)
             foreach ($f in $script:Findings) {
                 $lines += ("[{0}] {1,-10} {2}" -f $f.Status, $f.Category, $f.Message)
                 if ($f.Detail) { $lines += ("        -> " + $f.Detail) }
