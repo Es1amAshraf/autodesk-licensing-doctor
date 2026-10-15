@@ -14,13 +14,13 @@
     .\Sign.ps1 -List
 
     # sign every exe of a release, by certificate thumbprint
-    .\Sign.ps1 -Path .\releases\v1.2.5\*.exe -Thumbprint A1B2C3D4...
+    .\Sign.ps1 -Path .\releases\v1.2.6\*.exe -Thumbprint A1B2C3D4...
 
     # sign from a .pfx (only if your CA still allows software-protected keys)
     .\Sign.ps1 -Path .\UNLOCK-DIGITAL-AdskDoctor.exe -PfxFile .\cert.pfx
 
     # verify what is in a release folder
-    .\Sign.ps1 -Verify -Path .\releases\v1.2.5\*.exe
+    .\Sign.ps1 -Verify -Path .\releases\v1.2.6\*.exe
 #>
 [CmdletBinding()]
 param(

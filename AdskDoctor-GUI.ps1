@@ -70,6 +70,8 @@ $L = @{
     bLang         = 'English'
     bDownload     = 'تحميل البرامج الرسمية'
     downloadTip   = 'افتح موقع أوتوديسك الرسمي لتحميل البرامج (بحساب الاشتراك)'
+    bBundle       = 'حزمة الدعم (تقرير + لوجات)'
+    bundleTip     = 'يعمل فحص ويجمع لوجات الترخيص مع التقرير في ملف ZIP واحد تبعته للدعم'
     tip           = 'نصيحة: ابدأ بـ «فحص الجهاز»، بعدين «نسخة احتياطية»، وبعدها «تنظيف» ثم «إصلاح».'
     logTitle      = 'سجل العمليات'
     statusReady   = 'جاهز'
@@ -94,6 +96,8 @@ $L = @{
     repairApply   = 'إصلاح المكوّنات (تنفيذ)'
     repairPreview = 'إصلاح المكوّنات (معاينة)'
     repairMissing = 'ملف الإصلاح Repair.ps1 لسه مش موجود.'
+    repairAskDir  = "عندك فولدر فيه المثبّتات الرسمية (ADLS / AdSSO / WebView2)؟`n`nنعم = اختار الفولدر`nلا  = كمّل من غيرهم"
+    pickFolderTitle = 'اختَر فولدر المثبّتات الرسمية'
     noBackups     = 'مفيش نسخ احتياطية.'
     noUndo        = 'مفيش نسخ فيها UNDO.'
     undoTitle     = 'رجوع (Undo)'
@@ -119,6 +123,8 @@ $L = @{
     bLang         = 'العربية'
     bDownload     = 'Download official products'
     downloadTip   = 'Open the official Autodesk download page (sign in with your subscription)'
+    bBundle       = 'Support bundle (report + logs)'
+    bundleTip     = 'Scan, then collect the licensing logs with the report into one zip to send to support'
     tip           = 'Tip: start with "Scan this PC", then "Create backup", then "Clean this PC" and finally "Repair".'
     logTitle      = 'Activity log'
     statusReady   = 'Ready'
@@ -143,6 +149,8 @@ $L = @{
     repairApply   = 'Repair components (apply)'
     repairPreview = 'Repair components (preview)'
     repairMissing = 'Repair.ps1 is not present yet.'
+    repairAskDir  = "Do you have a folder with the official installers (ADLS / AdSSO / WebView2)?`n`nYes = pick the folder`nNo  = continue without them"
+    pickFolderTitle = 'Select the folder with the official installers'
     noBackups     = 'No backups found.'
     noUndo        = 'No backups contain an UNDO.'
     undoTitle     = 'Roll back (Undo)'
@@ -213,6 +221,7 @@ function T { param([string]$k) $L[$script:lang][$k] }
           <Separator Margin="0,8,0,8"/>
           <Button x:Name="BtnDownload" Content="" Height="40" Margin="0,0,0,8" FontSize="13" Background="#E41E2E" Foreground="White" FontWeight="SemiBold"/>
           <Button x:Name="BtnReport" Content="" Height="36" Margin="0,0,0,8" FontSize="13"/>
+          <Button x:Name="BtnBundle" Content="" Height="36" Margin="0,0,0,8" FontSize="13"/>
           <TextBlock x:Name="TipText" TextWrapping="Wrap" Foreground="#8A8F99" FontSize="11" Margin="0,14,0,0"/>
         </StackPanel>
       </Border>
@@ -257,9 +266,17 @@ $StatusText = $win.FindName('StatusText')
 $Bar        = $win.FindName('Bar')
 $LogTitle   = $win.FindName('LogTitle')
 $buttons    = @{}
-foreach ($n in 'BtnDiag','BtnBackup','BtnClean','BtnRepair','BtnUndo','BtnDownload','BtnReport','BtnLang') {
+foreach ($n in 'BtnDiag','BtnBackup','BtnClean','BtnRepair','BtnUndo','BtnDownload','BtnReport','BtnBundle','BtnLang') {
     $buttons[$n] = $win.FindName($n)
 }
+
+# The version comes from the compiled exe, so a support request can name it.
+# Running the .ps1 directly (development) has no version to report.
+$script:appVersion = 'dev'
+try {
+    $fvi = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileVersionInfo
+    if ($fvi -and $fvi.FileVersion) { $script:appVersion = $fvi.FileVersion }
+} catch {}
 
 # logo
 $script:hasLogo = $false
@@ -279,7 +296,7 @@ if (Test-Path -LiteralPath $logoPath) {
 # ---------------------------------------------------------------------------
 function Apply-Language {
     $win.Title = T 'windowTitle'
-    $SubTitle.Text = T 'subtitle'
+    $SubTitle.Text = (T 'subtitle') + '   ·  v' + $script:appVersion
     if ($script:hasLogo) { $BrandText.Text = (T 'brandSmall'); $BrandText.FontSize = 22 }
     else { $BrandText.Text = (T 'brand'); $BrandText.FontSize = 26 }
     $ActionsLabel.Text = T 'actions'
@@ -291,6 +308,8 @@ function Apply-Language {
     $buttons['BtnReport'].Content = T 'bReport'
     $buttons['BtnDownload'].Content = T 'bDownload'
     $buttons['BtnDownload'].ToolTip = T 'downloadTip'
+    $buttons['BtnBundle'].Content = T 'bBundle'
+    $buttons['BtnBundle'].ToolTip = T 'bundleTip'
     $buttons['BtnLang'].Content   = T 'bLang'
     $TipText.Text = T 'tip'
     $win.FlowDirection = if ($script:lang -eq 'ar') { [System.Windows.FlowDirection]::RightToLeft } else { [System.Windows.FlowDirection]::LeftToRight }
@@ -430,6 +449,19 @@ function Run-Task {
 # ---------------------------------------------------------------------------
 # Button actions
 # ---------------------------------------------------------------------------
+# Folder picker for the official installers (Repair can be pointed at a folder
+# that holds the ADLS / AdSSO / WebView2 installers from the product image).
+function Browse-Folder {
+    param([string]$Title)
+    try {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+        $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+        $dlg.Description = $Title
+        $dlg.ShowNewFolderButton = $false
+        if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { return $dlg.SelectedPath }
+    } catch { }
+    return $null
+}
 $buttons['BtnLang'].Add_Click({
     $script:lang = if ($script:lang -eq 'ar') { 'en' } else { 'ar' }
     Apply-Language
@@ -457,8 +489,18 @@ $buttons['BtnRepair'].Add_Click({
     if (-not (Test-Path -LiteralPath $repair)) { [System.Windows.MessageBox]::Show((T 'repairMissing'),'UNLOCK DIGITAL') | Out-Null; return }
     $r = [System.Windows.MessageBox]::Show((T 'repairText'), (T 'repairTitle'), 'YesNoCancel', 'Question')
     if ($r -eq 'Cancel') { return }
-    if ($r -eq 'Yes') { Run-Task -Title (T 'repairApply')   -Arguments @('-File', $repair, '-Apply') }
-    else              { Run-Task -Title (T 'repairPreview') -Arguments @('-File', $repair) }
+    $repairArgs = @('-File', $repair)
+    if ($r -eq 'Yes') { $repairArgs += '-Apply' }
+    # Repair installs the official components only when it is given them, so the
+    # operator can point it at the folder that holds them.
+    if ($r -eq 'Yes' -or $r -eq 'No') {
+        $q = [System.Windows.MessageBox]::Show((T 'repairAskDir'), (T 'repairTitle'), 'YesNo', 'Question')
+        if ($q -eq 'Yes') {
+            $dir = Browse-Folder -Title (T 'pickFolderTitle')
+            if ($dir) { $repairArgs += @('-InstallerDir', $dir) }
+        }
+    }
+    Run-Task -Title (T $(if ($r -eq 'Yes') { 'repairApply' } else { 'repairPreview' })) -Arguments $repairArgs
 })
 
 $buttons['BtnUndo'].Add_Click({
@@ -476,6 +518,14 @@ $buttons['BtnUndo'].Add_Click({
 $buttons['BtnReport'].Add_Click({
     $rep = Join-Path $here 'report.html'
     if (Test-Path -LiteralPath $rep) { Start-Process $rep } else { [System.Windows.MessageBox]::Show((T 'noReport'),'UNLOCK DIGITAL') | Out-Null }
+})
+
+# One file to send to support: the report + the licensing logs. The folder is
+# opened afterwards so the zip is easy to find.
+$buttons['BtnBundle'].Add_Click({
+    Run-Task -Title (T 'bBundle') `
+        -Arguments @('-File', (Join-Path $here 'AdskDoctor.ps1'), '-Html', '-Export', (Join-Path $here 'report.html'), '-Bundle') `
+        -OpenAfter $here
 })
 
 $buttons['BtnDownload'].Add_Click({ Start-Process 'https://manage.autodesk.com/products/all' })

@@ -120,7 +120,7 @@ is not approved before the timeout the job fails; simply re-run it.
 ## 5. Verify
 
 ```powershell
-Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.5.exe |
+Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.6.exe |
     Format-List Status, @{n='Signer';e={$_.SignerCertificate.Subject}}
 ```
 
@@ -153,10 +153,10 @@ If SignPath declines the project, a certificate you own can be used instead. No
 workflow changes are needed:
 
 ```powershell
-.\Build-Release.ps1 -Version 1.2.5 -Recompile     # build first
+.\Build-Release.ps1 -Version 1.2.6 -Recompile     # build first
 .\Sign.ps1 -List                                  # list usable certificates
-.\Sign.ps1 -Path .\releases\v1.2.5\*.exe -Thumbprint <sha1>
-.\Sign.ps1 -Verify -Path .\releases\v1.2.5\*.exe
+.\Sign.ps1 -Path .\releases\v1.2.6\*.exe -Thumbprint <sha1>
+.\Sign.ps1 -Verify -Path .\releases\v1.2.6\*.exe
 ```
 
 Always sign the **application exe before** building the installer, so the

@@ -1,5 +1,54 @@
 ﻿# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases
 
+## v1.2.6  (2026-10-15 21:48:56)
+
+Everything a sign-in failure needs, in one pass.
+
+New checks (read-only):
+- Microsoft Edge WebView2 runtime. Autodesk renders the "Sign in with your
+  Autodesk ID" window with it, and without it a product fails with "Licensing
+  error - An error occurred" BEFORE the sign-in page ever appears.
+- The identity component (AdskIdentityManager). Products from 2020 on sign in
+  through it, and it is a separate component from the licensing service.
+- .NET Framework 4.8+, which the licensing and sign-in interface is built on.
+- TLS 1.2 / strong crypto settings that block HTTPS to accounts.autodesk.com
+  (the old "harden TLS" tweak breaks sign-in), plus the SCHANNEL client entry.
+- Pending file renames: the third reboot flag, and the one that makes installers
+  fail with error 1603.
+- The newest licensing logs are listed, because the agent log names the exact
+  licensing failure.
+
+New: support bundle
+- AdskDoctor.ps1 ... -Bundle (or the Support bundle button) collects the report,
+  the licensing logs and system-info.txt into one zip to send with a support
+  request.
+
+Repair:
+- -WebView2Installer installs the official Microsoft WebView2 runtime quietly.
+- The sign-in window profile (EBWebView) is reset: a stale session there makes a
+  product fail before the window opens.
+- The product's own install image is searched for the official components
+  (x64\AdskLicensing, x64\AdSSO, x64\Components\*\Genuine*).
+- If a component is missing and no installer was supplied, it now prints exactly
+  where to get the official one. It still never downloads anything.
+
+UI:
+- New Support bundle button, a folder picker so Repair can be pointed at the
+  official installers you already have, and the app version in the header.
+
+Tests: 21 Pester tests in CI, including two policy guards - no script downloads a
+component, and both UI languages must define the same strings.
+
+Includes everything from v1.2.5 and v1.2.4: the toolkit no longer reports itself
+as a suspicious process, only real binaries are signature-scanned (a healthy
+machine used to show 322 false failures), the leftover AdskNLM service and the
+legacy ADLM licence cache are removed, UNDO.ps1 recreates deleted services, and
+the report groups problems by area with a verdict that names the fixing step.
+
+- `AdskDoctor-v1.2.6-Project.zip`  -  0.13 MB  -  SHA256 `74DD03EA9D29596397E97E395862C3F92872C656F9B2923C4A386BF24C8209DA`
+- `AdskDoctor-v1.2.6-Portable.zip`  -  0.14 MB  -  SHA256 `7A0F6A6CC21BA60848DF9ABA0643E7DB5055CDF1FD038481EE1A1DB5B5FE5CE7`
+- `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.6.exe`  -  2.11 MB  -  SHA256 `6B537C2E29DC398A86416164E1744E103FA48BA4F729C98861B6CE4310E5C934`
+
 ## v1.2.5  (2026-10-15 21:27:13)
 
 Report accuracy follow-up (v1.2.4 stopped the false signature failures; this

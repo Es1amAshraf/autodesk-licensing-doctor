@@ -21,16 +21,16 @@ Windows 10 / 11 · GUI in **Arabic + English** · no installation required.
 
 | What | Link |
 |------|------|
-| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.5.exe` (2.1 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.2.5/UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.5.exe) |
+| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.6.exe` (2.1 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.2.6/UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.6.exe) |
 | Portable `.zip` (no install) and full source | [releases page](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest) |
 | Always the newest release | <https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest> |
 
 SHA256 of the files above (also in `SHA256SUMS.txt` on the release page):
 
 ```text
-4D897959749BE2E23B1E6A1D72D632620203A030FBB928D0F1322FB13C612935  UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.5.exe
-7FE7653D4B97B4594D5C6223EEE7F884C06BC50F880D97F3DDCE5C39163C73CC  AdskDoctor-v1.2.5-Portable.zip
-295265925696916C3C71DA0E1F9FD7DA7C726EB32EAAA5367EE15F636965C777  AdskDoctor-v1.2.5-Project.zip
+6B537C2E29DC398A86416164E1744E103FA48BA4F729C98861B6CE4310E5C934  UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.6.exe
+7A0F6A6CC21BA60848DF9ABA0643E7DB5055CDF1FD038481EE1A1DB5B5FE5CE7  AdskDoctor-v1.2.6-Portable.zip
+74DD03EA9D29596397E97E395862C3F92872C656F9B2923C4A386BF24C8209DA  AdskDoctor-v1.2.6-Project.zip
 ```
 
 See [Verify your download](#verify-your-download).
@@ -130,6 +130,10 @@ The engine is scriptable too (all scripts run read-only/preview unless `-Apply`)
 # Phase 1 — diagnostic (writes report.html and opens it)
 powershell -ExecutionPolicy Bypass -File .\AdskDoctor.ps1 -Html -Export report.html
 
+# Phase 1 — diagnostic + support bundle (report + licensing logs + system info
+# collected into one zip, the thing to send with a support request)
+powershell -ExecutionPolicy Bypass -File .\AdskDoctor.ps1 -Html -Export report.html -Bundle
+
 # Phase 2 — layered backup (restore point + .reg exports + file copies + UNDO.ps1)
 powershell -ExecutionPolicy Bypass -File .\Backup.ps1
 
@@ -140,21 +144,54 @@ powershell -ExecutionPolicy Bypass -File .\Clean.ps1 -Apply
 # Phase 4 — repair / reinstall official components
 powershell -ExecutionPolicy Bypass -File .\Repair.ps1
 powershell -ExecutionPolicy Bypass -File .\Repair.ps1 -Apply
+
+# Phase 4 — with the official installers you have (point it at a folder, or pass
+# each file). WebView2 is a Microsoft component, so it has its own switch.
+powershell -ExecutionPolicy Bypass -File .\Repair.ps1 -Apply -InstallerDir "D:\Autodesk-Installers"
+powershell -ExecutionPolicy Bypass -File .\Repair.ps1 -Apply `
+    -AdlsInstaller "C:\...\Autodesk_Licensing_Service.exe" `
+    -WebView2Installer "C:\...\MicrosoftEdgeWebview2Setup.exe"
 ```
+
+`Repair.ps1` **never downloads anything.** It installs the official components
+you give it, and when one is missing with no installer supplied it prints where
+to get the official one instead of inventing a source.
+
+---
+
+## Support bundle
+
+A licensing failure is written to a log before it reaches the screen, and the
+log names the exact cause — but asking a customer to find it never works. The
+diagnostic collects them for you:
+
+```powershell
+.\AdskDoctor.ps1 -Html -Export report.html -Bundle
+# -> AdskDoctor-Support-<PC>-<date>.zip
+#      report.html        the full report
+#      logs\              the newest licensing logs (agent, ADLS, LGS, sign-in)
+#      system-info.txt    OS, products, summary, verdict
+```
+
+In the app it is the **Support bundle** button; the folder opens when it is done.
 
 ---
 
 ## What Phase 1 checks (read-only)
 
-System readiness · clock / time sync ("Clock Error") · installer health
+System readiness (admin, restore point, pending reboot, **pending file
+renames**) · clock / time sync ("Clock Error") · installer health
 ("Error 1603") · `hosts` hijacking · firewall blocks · Autodesk/FlexNet
 services (including services that point at deleted binaries) · **IFEO execution
 blockers** that stop Autodesk executables from starting · deep Authenticode scan
 of the `AdskLicensing` / `AdSSO` **binaries** (patched binaries are detected by
 their broken signature) · **ADLS** build, `Current` link, licensing agent and
-**AdSSO** presence ("Connection Lost", "Licensing error") · **Microsoft Edge
-WebView2 runtime** (the sign-in window is rendered with it — a product with no
-WebView2 fails *before* the sign-in page) · legacy **Network
+**AdSSO** presence ("Connection Lost", "Licensing error") · **sign-in
+prerequisites**: the **Microsoft Edge WebView2 runtime** that renders the
+sign-in window, the **identity component** (`AdskIdentityManager`), **.NET
+Framework 4.8+** and **TLS 1.2 / strong crypto** (a product fails *before* the
+sign-in page when any of them is missing or broken) · **licensing logs** (see
+the support bundle) · legacy **Network
 License Manager** · ODIS installer cache, antivirus and logs ("Unable to
 install") · product binaries · **leftovers of non-genuine patches**
 (`ProgramData\FLEXnet`, the legacy ADLM cache with `ProductInformation.pit`,
@@ -190,7 +227,7 @@ module and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (for the installer 
 
 ```powershell
 # compile the exe and cut a release (Project.zip + Portable.zip + Setup.exe + record)
-.\Build-Release.ps1 -Version 1.2.5 -Notes "..." -Recompile
+.\Build-Release.ps1 -Version 1.2.6 -Notes "..." -Recompile
 ```
 
 Each release is stored under `releases\v<version>\` in **three forms**:
@@ -230,8 +267,8 @@ certificate), sign the built binaries yourself:
 
 ```powershell
 .\Sign.ps1 -List                                    # show usable certificates
-.\Sign.ps1 -Path .\releases\v1.2.5\*.exe -Thumbprint <sha1>
-.\Sign.ps1 -Verify -Path .\releases\v1.2.5\*.exe     # check a release
+.\Sign.ps1 -Path .\releases\v1.2.6\*.exe -Thumbprint <sha1>
+.\Sign.ps1 -Verify -Path .\releases\v1.2.6\*.exe     # check a release
 ```
 
 ---
@@ -276,7 +313,7 @@ verification instructions are in **[CODE-SIGNING.md](CODE-SIGNING.md)**.
 Verify a downloaded file:
 
 ```powershell
-Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.5.exe |
+Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.6.exe |
     Format-List Status, SignerCertificate
 ```
 

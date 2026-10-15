@@ -72,14 +72,14 @@ This project collects nothing. See [PRIVACY.md](PRIVACY.md):
 PowerShell (no extra tools needed):
 
 ```powershell
-Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.5.exe |
+Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.6.exe |
     Format-List Status, StatusMessage, @{n='Signer';e={$_.SignerCertificate.Subject}}, TimeStamperCertificate
 ```
 
 Windows SDK `signtool`:
 
 ```cmd
-signtool verify /pa /v UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.5.exe
+signtool verify /pa /v UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.6.exe
 ```
 
 Or right-click the file → **Properties** → **Digital Signatures** tab.

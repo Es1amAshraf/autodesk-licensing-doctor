@@ -5,7 +5,8 @@
     cracked ("non-genuine") installs. CHANGES NOTHING.
 
     Coverage:
-      - System / environment readiness (admin, restore point, pending reboot)
+      - System / environment readiness (admin, restore point, pending reboot,
+        pending file renames)
       - Hosts file hijacks
       - Firewall rules blocking Autodesk
       - Autodesk / FlexNet services (existence, state, suspicious image path,
@@ -21,20 +22,33 @@
       - Local fake license server (listening FLEXlm ports)
       - Connectivity to Autodesk endpoints (443) + DNS sanity
       - WinHTTP proxy
+      - Sign-in prerequisites: Edge WebView2, identity component,
+        .NET Framework 4.8, TLS 1.2 / strong crypto
+      - Licensing logs (the agent log names the exact failure)
 
     Usage:
       .\AdskDoctor.ps1
       .\AdskDoctor.ps1 -Export C:\temp\report.txt
       .\AdskDoctor.ps1 -Json -Export C:\temp\report.json
       .\AdskDoctor.ps1 -Html -Export C:\temp\report.html
+      .\AdskDoctor.ps1 -Html -Export C:\temp\report.html -Bundle
 #>
 
 [CmdletBinding()]
 param(
     [switch]$Json,
     [switch]$Html,
-    [string]$Export
+    [string]$Export,
+    # collect the licensing logs next to the report and zip them, so a support
+    # request can be sent as one file
+    [switch]$Bundle
 )
+
+# -Bundle needs a report file to put inside the zip
+if ($Bundle -and -not $Export) {
+    $Html   = $true
+    $Export = Join-Path (Get-Location).Path 'report.html'
+}
 
 $ErrorActionPreference = 'SilentlyContinue'
 $ProgressPreference    = 'SilentlyContinue'
@@ -243,6 +257,15 @@ foreach ($k in @(
 }
 if ($pending) { Add-Finding WARN 'System' 'A reboot is pending - reboot before reinstalling licensing components' '' }
 else { Add-Finding OK 'System' 'No pending reboot' }
+
+# pending file renames (the third reboot flag, and the one that makes installers
+# fail with error 1603)
+try {
+    $pfr = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name PendingFileRenameOperations -ErrorAction Stop).PendingFileRenameOperations
+    if (@($pfr).Count -gt 0) {
+        Add-Finding WARN 'System' ('Pending file renames are queued ({0} entries) - reboot before installing' -f @($pfr).Count) 'Installers fail with error 1603 while renames are pending'
+    }
+} catch {}
 
 # Windows Installer service (needed to install/repair components)
 $msi = Get-Service msiserver
@@ -567,6 +590,53 @@ if ($wv2.Count) {
     }
 }
 
+# --- identity component -----------------------------------------------------
+# 2020+ products sign in through Autodesk Identity Manager, which is a separate
+# component from ADLS. Without it the sign-in flow cannot complete.
+$idm = @(
+    (Join-Path $env:ProgramFiles 'Autodesk\AdskIdentityManager\AdskIdentityManager.exe'),
+    (Join-Path ${env:ProgramFiles(x86)} 'Autodesk\AdskIdentityManager\AdskIdentityManager.exe')
+) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if ($idm) {
+    Add-Finding OK 'Licensing' ('Identity component present (version {0})' -f (Get-Item -LiteralPath $idm).VersionInfo.FileVersion) $idm
+} elseif ($adskInstalled) {
+    Add-Finding WARN 'Licensing' 'Identity component (AdskIdentityManager) not found' 'Products from 2020 on sign in through it; reinstall it from the official installer (Repair step)'
+} else {
+    Add-Finding INFO 'Licensing' 'Identity component not installed' 'No Autodesk product is installed on this machine'
+}
+
+# --- .NET Framework ---------------------------------------------------------
+# the licensing and sign-in user interface is built on .NET Framework 4.8+
+try {
+    $ndp = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full' -ErrorAction Stop
+    if ($ndp.Release -ge 528040) { Add-Finding OK 'Licensing' ('Microsoft .NET Framework 4.8+ present (release {0})' -f $ndp.Release) '' }
+    elseif ($ndp.Release) { Add-Finding WARN 'Licensing' ('.NET Framework is older than 4.8 (release {0})' -f $ndp.Release) 'The licensing interface needs 4.8 or newer' }
+    else { Add-Finding INFO 'Licensing' '.NET Framework build number not reported' '' }
+} catch {
+    Add-Finding WARN 'Licensing' 'Microsoft .NET Framework 4.x not detected' 'The licensing interface needs .NET Framework 4.8 or newer'
+}
+
+# --- TLS 1.2 / strong crypto ------------------------------------------------
+# sign-in talks HTTPS to accounts.autodesk.com. Old "harden/disable TLS" tweaks
+# and the pre-4.7 .NET defaults break it, and the product then fails before the
+# sign-in page. Only explicit values are judged - an absent value is the modern
+# default.
+$tlsBad = @()
+foreach ($root in @('HKLM:\SOFTWARE\Microsoft\.NETFramework\v4.0.30319',
+                    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319')) {
+    foreach ($name in @('SchUseStrongCrypto','SystemDefaultTlsVersions')) {
+        $v = (Get-ItemProperty -LiteralPath $root -Name $name -ErrorAction SilentlyContinue).$name
+        if ($null -ne $v -and $v -eq 0) { $tlsBad += ($root + '\' + $name + ' = 0') }
+    }
+}
+$tls12 = Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client' -ErrorAction SilentlyContinue
+if ($tls12 -and ($tls12.Enabled -eq 0 -or $tls12.DisabledByDefault -eq 1)) { $tlsBad += 'SCHANNEL: TLS 1.2 client disabled' }
+if ($tlsBad.Count -gt 0) {
+    Add-Finding BAD 'Licensing' 'TLS 1.2 is disabled - sign-in cannot reach Autodesk over HTTPS' ($tlsBad -join ' ; ')
+} else {
+    Add-Finding OK 'Licensing' 'TLS 1.2 client settings look correct'
+}
+
 # ===========================================================================
 # 4b. Network License Manager (NLM)
 #     An OLD NLM blocks installation of Revit/AutoCAD 2026+
@@ -656,6 +726,31 @@ try {
         Add-Finding INFO 'Logs' 'No recent Autodesk install logs found' ''
     }
 } catch {}
+
+# Licensing logs - what a support request actually needs, because the agent log
+# names the exact licensing failure. They are collected with -Bundle.
+$script:LogFiles = @()
+$logSources = @(
+    (Join-Path $env:LOCALAPPDATA 'Autodesk\Logs'),
+    (Join-Path $env:ProgramData 'Autodesk\AdskLicensingService'),
+    (Join-Path $env:ProgramData 'Autodesk\AdskLicensing'),
+    (Join-Path $env:LOCALAPPDATA 'Autodesk\AdskLicensingAgent'),
+    (Join-Path $env:ProgramData 'Autodesk\CLM\LGS')
+)
+foreach ($src in $logSources) {
+    if (Test-Path -LiteralPath $src) {
+        $script:LogFiles += @(Get-ChildItem -LiteralPath $src -Recurse -File -ErrorAction SilentlyContinue |
+                              Where-Object { $_.Extension -in '.log','.txt' } |
+                              Sort-Object LastWriteTime -Descending | Select-Object -First 5)
+    }
+}
+$script:LogFiles = @($script:LogFiles | Sort-Object FullName -Unique)
+if ($script:LogFiles.Count -gt 0) {
+    $newest = $script:LogFiles | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    Add-Finding INFO 'Logs' ('Licensing logs available: {0} file(s), newest "{1}" ({2})' -f $script:LogFiles.Count, $newest.Name, $newest.LastWriteTime) 'The agent log names the exact licensing failure - collect them with -Bundle'
+} else {
+    Add-Finding INFO 'Logs' 'No licensing logs found' 'No product has tried to license on this machine yet'
+}
 
 # ===========================================================================
 # 5. Installed products - executable signature scan
@@ -1092,5 +1187,59 @@ $rows
     } catch {
         Write-Host ("Could not write report: {0}" -f $_.Exception.Message) -ForegroundColor Red
         Write-Host ($_.InvocationInfo.PositionMessage) -ForegroundColor DarkGray
+    }
+}
+
+# ===========================================================================
+# Support bundle  (report + licensing logs + system info in one zip)
+# ===========================================================================
+if ($Bundle) {
+    try {
+        $base  = if ($Export) { Split-Path -Parent $Export } else { (Get-Location).Path }
+        $stamp = Get-Date -Format 'yyyyMMdd-HHmm'
+        $stage = Join-Path $env:TEMP ('adskdoctor-bundle-' + $stamp)
+        $logDir = Join-Path $stage 'logs'
+        New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+
+        if ($Export -and (Test-Path -LiteralPath $Export)) {
+            Copy-Item -LiteralPath $Export -Destination (Join-Path $stage (Split-Path -Leaf $Export)) -Force
+        }
+        $i = 0
+        foreach ($lf in $script:LogFiles) {
+            if ($lf.Length -gt 10MB) { continue }   # keep the bundle sendable
+            $i++
+            # the source folder keeps two "agent-stdout.log" files apart
+            $tag = Split-Path -Leaf (Split-Path -Parent $lf.FullName)
+            Copy-Item -LiteralPath $lf.FullName -Destination (Join-Path $logDir ("{0:D2}-{1}-{2}" -f $i, $tag, $lf.Name)) -Force -ErrorAction SilentlyContinue
+        }
+
+        $info = @(
+            'Autodesk Licensing Doctor - support bundle',
+            ('Computer : ' + $env:COMPUTERNAME),
+            ('User     : ' + $env:USERNAME),
+            ('Date     : ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')),
+            ('OS       : ' + $os.Caption + ' (build ' + $os.BuildNumber + ')'),
+            ('Admin    : ' + $isAdmin),
+            ('Shell    : PowerShell ' + $PSVersionTable.PSVersion.ToString()),
+            ('Summary  : FAIL=' + $badCount + ' WARN=' + $warnCount + ' OK=' + $okCount),
+            ('Verdict  : ' + $verdict),
+            '',
+            'Problems by area:'
+        )
+        foreach ($g in $badByCat)  { $info += ('  FAIL  ' + $g.Name + ' (' + $g.Count + ')') }
+        foreach ($g in $warnByCat) { $info += ('  WARN  ' + $g.Name + ' (' + $g.Count + ')') }
+        $info += ''
+        $info += ('Licensing logs collected: ' + $i)
+        $info | Set-Content -LiteralPath (Join-Path $stage 'system-info.txt') -Encoding UTF8
+
+        $zip = Join-Path $base ('AdskDoctor-Support-' + $env:COMPUTERNAME + '-' + $stamp + '.zip')
+        if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
+        Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
+        Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host ''
+        Write-Host ("Support bundle: {0}" -f $zip) -ForegroundColor Green
+        Write-Host '   (the report + licensing logs + system info - send this one file with a support request)' -ForegroundColor DarkGray
+    } catch {
+        Write-Host ("Could not create the support bundle: {0}" -f $_.Exception.Message) -ForegroundColor Red
     }
 }

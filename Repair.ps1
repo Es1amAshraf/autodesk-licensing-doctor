@@ -8,22 +8,27 @@
       1. Pre-flight checks (admin, pending reboot, Windows Installer)
       2. Reset the ADLS service state        -> fixes "Connection Lost"
       3. Restart + fix startup of the services (ADLS, Access)
-      4. Clear the licensing/token cache     -> forces a clean sign-in
-      5. Install/repair official components (ADLS, AdSSO, Genuine) if provided
-      6. Verify everything (service + files + connectivity to Autodesk)
+      4. Clear the licensing/token cache and the sign-in window profile
+      5. Install/repair official components (ADLS, AdSSO, Genuine, WebView2) if provided
+      6. Verify everything (service + files + WebView2 + connectivity to Autodesk)
 
     Official installers (optional but recommended). Point -InstallerDir at a
     folder that contains them, or pass each path explicitly. They are matched
-    by name:
+    by name, and the product's own install image is searched automatically:
         *Licensing* / *AdskLicensing* / *DesktopLicensing*  -> ADLS
         *AdSSO* / *SingleSignOn*                            -> AdSSO
         *Genuine*                                           -> Genuine Service
+        *WebView2*                                          -> Edge WebView2 (Microsoft)
+
+    This script never downloads anything. If a component is missing and no
+    installer was supplied, it prints exactly where to get the official one.
 
     Usage:
       .\Repair.ps1                                   # preview
       .\Repair.ps1 -Apply                            # reset + verify
       .\Repair.ps1 -Apply -InstallerDir "D:\Installers"
       .\Repair.ps1 -Apply -AdlsInstaller "C:\...\Autodesk_Licensing_Service.exe"
+      .\Repair.ps1 -Apply -WebView2Installer "C:\...\MicrosoftEdgeWebview2Setup.exe"
 #>
 
 [CmdletBinding()]
@@ -33,6 +38,7 @@ param(
     [string]$AdlsInstaller,
     [string]$AdSsoInstaller,
     [string]$GenuineInstaller,
+    [string]$WebView2Installer,
     [string]$SilentArgs = '/S',
     [switch]$SkipReset,
     [switch]$SkipConnectivity
@@ -138,6 +144,20 @@ foreach ($p in @(
 }
 Info 'Products will ask you to sign in again after this.'
 
+# The sign-in window itself is rendered with Edge WebView2, and its profile can
+# hold a stale/corrupt session that makes a product fail *before* the window
+# ever opens ("Licensing error - An error occurred"). The profile is rebuilt on
+# the next sign-in attempt; the agent binaries next to it are left alone.
+$agentLocal = Join-Path $env:LOCALAPPDATA 'Autodesk\AdskLicensingAgent'
+if (Test-Path -LiteralPath $agentLocal) {
+    $eb = @(Get-ChildItem -LiteralPath $agentLocal -Recurse -Directory -Filter 'EBWebView' -ErrorAction SilentlyContinue)
+    foreach ($d in $eb) {
+        $dp = $d.FullName
+        Step ("Clear sign-in window profile {0}" -f $dp) { Remove-Item -LiteralPath $dp -Recurse -Force }
+    }
+    if ($eb.Count -eq 0) { Info 'No sign-in window profile found (nothing to clear)' }
+}
+
 # ---------------------------------------------------------------------------
 # 5. Install / repair official components
 # ---------------------------------------------------------------------------
@@ -153,6 +173,39 @@ if ($InstallerDir -and (Test-Path -LiteralPath $InstallerDir)) {
     if (-not $AdlsInstaller)    { $AdlsInstaller    = ($files | Where-Object { $_.Name -match 'Licensing|AdskLicensing|DesktopLicensing' } | Select-Object -First 1).FullName }
     if (-not $AdSsoInstaller)   { $AdSsoInstaller   = ($files | Where-Object { $_.Name -match 'AdSSO|SingleSignOn|SSO' }             | Select-Object -First 1).FullName }
     if (-not $GenuineInstaller) { $GenuineInstaller = ($files | Where-Object { $_.Name -match 'Genuine' }                            | Select-Object -First 1).FullName }
+    if (-not $WebView2Installer){ $WebView2Installer= ($files | Where-Object { $_.Name -match 'WebView2|WebView' }                   | Select-Object -First 1).FullName }
+}
+
+# A product's own install image carries the exact component builds it needs, so
+# the usual places are probed too (the wildcard path is intentional: a name
+# -Include filter is ignored with -LiteralPath, which would match anything).
+if (-not $AdlsInstaller -or -not $AdSsoInstaller) {
+    $images = @('C:\Autodesk\*\x64', 'C:\Autodesk\*\*\x64')
+    if (-not $AdlsInstaller) {
+        $AdlsInstaller = (Get-ChildItem -Path ($images | ForEach-Object { Join-Path $_ 'AdskLicensing\*.exe' }) -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+    }
+    if (-not $AdSsoInstaller) {
+        $AdSsoInstaller = (Get-ChildItem -Path ($images | ForEach-Object { Join-Path $_ 'AdSSO\*.exe' }) -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+    }
+    if (-not $GenuineInstaller) {
+        $GenuineInstaller = (Get-ChildItem -Path ($images | ForEach-Object { Join-Path $_ 'Components\*\Genuine*\*.exe' }) -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+    }
+}
+if ($AdlsInstaller -and -not $InstallerDir) { Info ('Found an official ADLS installer on this machine: ' + $AdlsInstaller) }
+
+# Where an official component comes from. This script installs only what it is
+# given and never downloads anything, so be explicit about the sources.
+function Show-ComponentSources {
+    param([string]$What)
+    Write-Host ("  {0} is missing and no installer was supplied. Official sources:" -f $What) -ForegroundColor Yellow
+    Write-Host '    1) the product image (best: it matches the product version)' -ForegroundColor DarkGray
+    Write-Host '         <image>\x64\AdskLicensing\*.exe     (ADLS)' -ForegroundColor DarkGray
+    Write-Host '         <image>\x64\AdSSO\*.exe             (identity / sign-in)' -ForegroundColor DarkGray
+    Write-Host '         <image>\x64\Components\*\Genuine*   (Genuine Service)' -ForegroundColor DarkGray
+    Write-Host '    2) your Autodesk account: https://manage.autodesk.com/products/all' -ForegroundColor DarkGray
+    Write-Host '    3) a Custom Install / Deployment folder -> point -InstallerDir at it' -ForegroundColor DarkGray
+    Write-Host '    4) WebView2 is a Microsoft component:' -ForegroundColor DarkGray
+    Write-Host '         https://developer.microsoft.com/microsoft-edge/webview2' -ForegroundColor DarkGray
 }
 
 function Invoke-Pkg {
@@ -172,9 +225,22 @@ function Invoke-Pkg {
         if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { throw ("exit code " + $p.ExitCode) }
     }
 }
-Invoke-Pkg -Label 'ADLS'    -Path $AdlsInstaller    -Args $SilentArgs
-Invoke-Pkg -Label 'AdSSO'   -Path $AdSsoInstaller   -Args $SilentArgs
-Invoke-Pkg -Label 'Genuine' -Path $GenuineInstaller -Args $SilentArgs
+Invoke-Pkg -Label 'ADLS'     -Path $AdlsInstaller     -Args $SilentArgs
+Invoke-Pkg -Label 'AdSSO'    -Path $AdSsoInstaller    -Args $SilentArgs
+Invoke-Pkg -Label 'Genuine'  -Path $GenuineInstaller  -Args $SilentArgs
+# the WebView2 installers (Evergreen bootstrapper and the standalone package)
+# both accept /silent /install
+Invoke-Pkg -Label 'WebView2' -Path $WebView2Installer -Args '/silent /install'
+
+# A component that is absent and has no installer never gets invented here: say
+# where the official one comes from instead.
+if (-not (Test-Path -LiteralPath $adskLicensingRoot) -and -not $AdlsInstaller) {
+    Show-ComponentSources 'AdskLicensing (ADLS)'
+}
+$wv2Key = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+if (-not (Test-Path -LiteralPath $wv2Key) -and -not $WebView2Installer) {
+    Show-ComponentSources 'Microsoft Edge WebView2 (the sign-in window)'
+}
 
 # report what is installed
 if (Test-Path -LiteralPath $adskLicensingRoot) {
@@ -199,6 +265,18 @@ if ($adls2) {
 }
 if (Test-Path -LiteralPath $adskLicensingRoot) { Write-Host '  [ OK ] AdskLicensing component present' -ForegroundColor Green }
 else { Write-Host '  [FAIL] AdskLicensing component missing' -ForegroundColor Red }
+
+if (Test-Path -LiteralPath $wv2Key) {
+    Write-Host '  [ OK ] Microsoft Edge WebView2 present (the sign-in window can render)' -ForegroundColor Green
+} else {
+    Write-Host '  [WARN] Microsoft Edge WebView2 MISSING - the sign-in window cannot open' -ForegroundColor Yellow
+}
+$idm = @(
+    (Join-Path $env:ProgramFiles 'Autodesk\AdskIdentityManager\AdskIdentityManager.exe'),
+    (Join-Path ${env:ProgramFiles(x86)} 'Autodesk\AdskIdentityManager\AdskIdentityManager.exe')
+) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if ($idm) { Write-Host ('  [ OK ] Identity component present: ' + $idm) -ForegroundColor Green }
+else { Write-Host '  [WARN] Identity component (AdskIdentityManager) not found - sign-in may not complete' -ForegroundColor Yellow }
 
 if (-not $SkipConnectivity) {
     foreach ($h in @('registeronce.autodesk.com','genuine-software.autodesk.com','accounts.autodesk.com')) {

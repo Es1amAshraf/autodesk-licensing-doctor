@@ -250,4 +250,77 @@ Describe 'Regression guards' {
         $diag | Should -Match 'WebView2'
         $diag | Should -Match '\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5\}'
     }
+
+    It 'installs the official WebView2 runtime when given the installer' {
+        # the sign-in window cannot render without WebView2, and it is not part
+        # of Windows, so Repair has to be able to install it
+        $repair = Get-Content -LiteralPath (Join-Path $script:Root 'Repair.ps1') -Raw
+        $repair | Should -Match '\[string\]\$WebView2Installer'
+        $repair | Should -Match "Invoke-Pkg -Label 'WebView2'"
+        $repair | Should -Match '/silent /install'
+    }
+
+    It 'never downloads a component (official installers only)' {
+        # a licensing tool that pulls binaries off the internet is a security
+        # problem, and it is the opposite of what this toolkit promises
+        foreach ($name in @('Repair.ps1', 'AdskDoctor.ps1', 'Clean.ps1', 'Backup.ps1')) {
+            $text = Get-Content -LiteralPath (Join-Path $script:Root $name) -Raw
+            $text | Should -Not -Match 'Invoke-WebRequest[^\r\n]*\.(exe|msi)' -Because "$name must not download installers"
+            $text | Should -Not -Match 'Start-BitsTransfer|DownloadFile|DownloadString'
+        }
+    }
+
+    It 'resets the sign-in window profile (EBWebView) during a repair' {
+        # a stale WebView2 profile makes a product fail before the sign-in page
+        $repair = Get-Content -LiteralPath (Join-Path $script:Root 'Repair.ps1') -Raw
+        $repair | Should -Match 'EBWebView'
+        $repair | Should -Match 'AdskLicensingAgent'
+    }
+
+    It 'tells the operator where an official component comes from' {
+        # Repair installs only what it is given and never downloads, so a missing
+        # component has to come with directions
+        $repair = Get-Content -LiteralPath (Join-Path $script:Root 'Repair.ps1') -Raw
+        $repair | Should -Match 'manage\.autodesk\.com/products/all'
+        $repair | Should -Match 'Show-ComponentSources'
+        $repair | Should -Match 'x64\\AdskLicensing'
+    }
+
+    It 'checks the other sign-in prerequisites (identity, .NET, TLS, file renames)' {
+        $diag = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
+        $diag | Should -Match 'AdskIdentityManager'
+        $diag | Should -Match 'NET Framework Setup'
+        $diag | Should -Match 'SystemDefaultTlsVersions'
+        $diag | Should -Match 'PendingFileRenameOperations'
+        $diag | Should -Match 'TLS 1\.2 is disabled'
+    }
+
+    It 'collects the licensing logs into a support bundle' {
+        # the agent log names the exact licensing failure, and asking a customer
+        # to find it by hand does not work
+        $diag = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
+        $diag | Should -Match '\[switch\]\$Bundle'
+        $diag | Should -Match 'Compress-Archive'
+        $diag | Should -Match 'system-info\.txt'
+    }
+
+    It 'offers the support bundle and the installer folder in the UI' {
+        $gui = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor-GUI.ps1') -Raw
+        $gui | Should -Match 'x:Name="BtnBundle"'
+        $gui | Should -Match "'-InstallerDir'"
+        $gui | Should -Match 'FolderBrowserDialog'
+    }
+
+    It 'defines the same UI strings in Arabic and English' {
+        # a key that exists in one table only renders as an empty button
+        $gui = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor-GUI.ps1') -Raw
+        $ar = [regex]::Match($gui, "(?s)ar = @\{(.*?)\n  \}").Groups[1].Value
+        $en = [regex]::Match($gui, "(?s)en = @\{(.*?)\n  \}").Groups[1].Value
+        $ar | Should -Not -BeNullOrEmpty
+        $en | Should -Not -BeNullOrEmpty
+        $key = '(?m)^\s{4}([A-Za-z][A-Za-z0-9]*)\s*='
+        $arKeys = @([regex]::Matches($ar, $key) | ForEach-Object { $_.Groups[1].Value })
+        $enKeys = @([regex]::Matches($en, $key) | ForEach-Object { $_.Groups[1].Value })
+        @(Compare-Object $arKeys $enKeys) | Should -BeNullOrEmpty -Because 'both languages need the same keys'
+    }
 }
