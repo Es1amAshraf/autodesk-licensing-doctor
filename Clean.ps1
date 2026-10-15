@@ -217,8 +217,13 @@ if ($KeepNLM) {
             Step ("Remove old NLM folder {0}" -f $np) { Remove-Item -LiteralPath $npp -Recurse -Force }
         }
     }
-    # FlexNet / NLM services
-    foreach ($s in @(Get-Service | Where-Object { $_.Name -match 'flexnet|flexlm' -or $_.DisplayName -match 'Network License Manager' })) {
+    # FlexNet / NLM services. The Autodesk Network License Manager service is
+    # called AdskNLM and its display name does not contain "Network License
+    # Manager", so it survived an earlier cleanup as a service pointing at
+    # deleted binaries (seen on a customer machine).
+    foreach ($s in @(Get-Service | Where-Object {
+            $_.Name -match 'flexnet|flexlm|adsknlm' -or
+            $_.DisplayName -match 'Network License Manager|AdskNLM' })) {
         $sn = $s.Name
         Step ("Remove NLM/FlexNet service {0}" -f $sn) {
             Stop-Service -Name $sn -Force -ErrorAction SilentlyContinue

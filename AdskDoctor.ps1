@@ -839,16 +839,41 @@ if (-not $startupHit) { Add-Finding OK 'Startup' 'No Autodesk startup entries' }
 # ===========================================================================
 Write-Section 'Running processes'
 try {
+    # The toolkit itself matches the "adsk" pattern and may run from a user
+    # profile (the portable zip), so its own processes are excluded - an earlier
+    # build reported itself as a suspicious running process.
     $procs = @(Get-Process | Where-Object {
-        $_.ProcessName -match 'autodesk|adsk|acad|revit|3dsmax|maya|flexnet|flexlm|lmgrd|adskflex|nimsoft|adlm'
+        $_.ProcessName -match 'autodesk|adsk|acad|revit|3dsmax|maya|flexnet|flexlm|lmgrd|adskflex|nimsoft|adlm' -and
+        $_.ProcessName -notmatch 'adskdoctor|unlock-digital'
     })
     if ($procs.Count -gt 0) {
         foreach ($pr in $procs) {
             $ppath = $null
             try { $ppath = $pr.Path } catch {}
-            $sev = 'INFO'; $susp = Get-PathSuspicion $ppath; if ($susp) { $sev = $susp }
+            # A path alone decides nothing: Autodesk ships genuine per-user
+            # products (Access, Fusion) under %LOCALAPPDATA%, so the signature of
+            # the binary is the real signal.
+            $sev  = 'INFO'
+            $note = ''
+            if ($ppath -and (Test-Path -LiteralPath $ppath)) {
+                $sig = Get-AuthenticodeSignature -LiteralPath $ppath -ErrorAction SilentlyContinue
+                if ($sig.Status -eq 'Valid' -and $sig.SignerCertificate.Subject -match 'Autodesk') {
+                    $note = 'Autodesk-signed'
+                } elseif ($sig.Status -eq 'HashMismatch') {
+                    $sev = 'BAD'; $note = 'signature broken - patched binary'
+                } elseif ($sig.Status -eq 'Valid') {
+                    $sev = 'WARN'; $note = ('signed by ' + $sig.SignerCertificate.Subject)
+                } else {
+                    $sev = 'WARN'; $note = 'unsigned binary'
+                }
+                if ($note -ne 'Autodesk-signed') {
+                    $psk = Get-PathSuspicion $ppath
+                    if ($psk -eq 'BAD') { $sev = 'BAD' }
+                    elseif ($psk -and $sev -eq 'INFO') { $sev = 'WARN' }
+                }
+            }
             if ($pr.ProcessName -match 'lmgrd|adskflex|flexlm') { $sev = 'BAD' }
-            Add-Finding $sev 'Processes' ("Process running: {0} (PID {1})" -f $pr.ProcessName, $pr.Id) $ppath
+            Add-Finding $sev 'Processes' ("Process running: {0} (PID {1})" -f $pr.ProcessName, $pr.Id) ($ppath + $(if ($note) { ' | ' + $note } else { '' }))
         }
     } else { Add-Finding OK 'Processes' 'No Autodesk/license processes running' }
 } catch {

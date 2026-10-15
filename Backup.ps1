@@ -215,6 +215,21 @@ $fileBlock
 Write-Host 'Restoring folders...' -ForegroundColor Cyan
 $folderBlock
 
+# Services removed by a clean-up cannot be restored from a file copy, so they
+# are recreated from the snapshot taken before the clean-up.
+`$csv = Join-Path `$PSScriptRoot 'state\services.csv'
+if (Test-Path -LiteralPath `$csv) {
+    Write-Host 'Restoring services...' -ForegroundColor Cyan
+    foreach (`$s in (Import-Csv -LiteralPath `$csv)) {
+        if (-not `$s.Name) { continue }
+        if (Get-Service -Name `$s.Name -ErrorAction SilentlyContinue) { continue }
+        `$start = switch (`$s.StartMode) { 'Auto' { 'auto' } 'Manual' { 'demand' } 'Disabled' { 'disabled' } 'Boot' { 'boot' } 'System' { 'system' } default { 'auto' } }
+        Write-Host ("  recreating service " + `$s.Name) -ForegroundColor Yellow
+        sc.exe create `$s.Name binPath= "`$(`$s.PathName)" DisplayName= "`$(`$s.DisplayName)" start= `$start | Out-Null
+        if (`$s.State -eq 'Running') { sc.exe start `$s.Name | Out-Null }
+    }
+}
+
 `$fw = Join-Path `$PSScriptRoot 'state\firewall.wfw'
 if (Test-Path -LiteralPath `$fw) {
     Write-Host 'Restoring firewall policy...' -ForegroundColor Cyan

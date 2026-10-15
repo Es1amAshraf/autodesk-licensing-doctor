@@ -109,6 +109,9 @@ Describe 'Layered backup and UNDO' {
         $errors = $null
         [void][System.Management.Automation.Language.Parser]::ParseFile($undo, [ref]$null, [ref]$errors)
         @($errors).Count | Should -Be 0 -Because 'UNDO.ps1 has to be runnable'
+        # A service that the clean-up deletes cannot come back from a file copy,
+        # so UNDO has to recreate it from the snapshot.
+        (Get-Content -LiteralPath $undo -Raw) | Should -Match 'Restoring services'
     }
 
     It 'keeps a copy of the hosts file' {
@@ -220,5 +223,20 @@ Describe 'Regression guards' {
         $backup = Get-Content -LiteralPath (Join-Path $script:Root 'Backup.ps1') -Raw
         $clean  | Should -Match 'Autodesk\\Adlm'
         $backup | Should -Match 'Autodesk\\Adlm'
+    }
+
+    It 'removes the Autodesk Network License Manager service (AdskNLM)' {
+        # Clean-up used to match only "flexnet|flexlm" and the display name
+        # "Network License Manager", so a leftover AdskNLM service pointing at
+        # deleted binaries survived on a customer machine.
+        $clean = Get-Content -LiteralPath (Join-Path $script:Root 'Clean.ps1') -Raw
+        $clean | Should -Match 'adsknlm'
+    }
+
+    It 'does not treat its own process as a suspicious Autodesk process' {
+        # "UNLOCK-DIGITAL-AdskDoctor" matches the "adsk" pattern and the portable
+        # build runs from a user profile, so the toolkit reported itself as FAIL.
+        $diag = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
+        $diag | Should -Match "ProcessName -notmatch 'adskdoctor\|unlock-digital'"
     }
 }
