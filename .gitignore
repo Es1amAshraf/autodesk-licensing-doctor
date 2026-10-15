@@ -1,0 +1,27 @@
+# ---- Build / release output ----------------------------------------------
+releases/
+*.zip
+
+# ---- Compiled application (built from the .ps1 sources) -------------------
+UNLOCK-DIGITAL-AdskDoctor.exe
+_test-noUAC.exe
+
+# ---- Runtime artifacts produced by the tool ------------------------------
+report.html
+report.json
+report.txt
+*.log
+backups/
+_Backups/
+Cleanup*
+
+# ---- Client samples (screenshots / videos) -------------------------------
+samples/*
+!samples/.gitkeep
+
+# ---- OS / editor ---------------------------------------------------------
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp

@@ -1,0 +1,10 @@
+# Keep every file byte-for-byte as committed.
+# The PowerShell scripts carry a UTF-8 BOM (required for Arabic on PS 5.1),
+# so we must NOT let Git normalise line endings or re-encode anything.
+* -text
+
+*.ico  binary
+*.png  binary
+*.jpg  binary
+*.webp binary
+*.zip  binary
