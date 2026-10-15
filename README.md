@@ -1,5 +1,11 @@
 # Autodesk Licensing Doctor
 
+[![CI](https://github.com/Es1amAshraf/autodesk-licensing-doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/Es1amAshraf/autodesk-licensing-doctor/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Es1amAshraf/autodesk-licensing-doctor?label=release)](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue)](#)
+[![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-5391FE)](https://microsoft.com/powershell)
+
 **UNLOCK DIGITAL** — *By Eng. Eslam Ashraf*
 
 A portable Windows toolkit for Autodesk resellers and IT pros that **removes
@@ -159,6 +165,16 @@ Repository configuration needed:
 SignPath from the files in `.signpath/`. Apply for the free OSS certificate at
 <https://signpath.org/apply>.
 
+**Alternative — sign locally with your own certificate.** If you hold a code
+signing certificate (e.g. Certum Open Source Code Signing, or an OV
+certificate), sign the built binaries yourself:
+
+```powershell
+.\Sign.ps1 -List                                    # show usable certificates
+.\Sign.ps1 -Path .\releases\v1.2.1\*.exe -Thumbprint <sha1>
+.\Sign.ps1 -Verify -Path .\releases\v1.2.1\*.exe     # check a release
+```
+
 ---
 
 ## Project layout
@@ -178,6 +194,7 @@ SignPath from the files in `.signpath/`. Apply for the free OSS certificate at
 | `.github/workflows/release-sign.yml` | CI: build → sign with SignPath → publish release |
 | `.github/workflows/ci.yml` | CI: parse + lint + config validation |
 | `Publish-Release.ps1` | one-command release: build → commit → push → publish |
+| `Sign.ps1` | Authenticode-sign release binaries with your own certificate (local alternative to CI signing) |
 | `SIGNPATH-SETUP.md` | step-by-step guide to enabling code signing |
 | `CODE-SIGNING.md` | code signing policy |
 | `PRIVACY.md` | privacy policy |

@@ -160,4 +160,25 @@ Then install it — the UAC prompt must show **SignPath Foundation**, not
 
 ---
 
+## Fallback — sign locally with your own certificate
+
+If SignPath declines the project (or while you wait), you can sign with a
+certificate you hold instead. No workflow changes are needed:
+
+```powershell
+.\Build-Release.ps1 -Version 1.2.1 -Recompile     # build first
+.\Sign.ps1 -List                                  # find your certificate
+.\Sign.ps1 -Path .\releases\v1.2.1\*.exe -Thumbprint <sha1>
+.\Sign.ps1 -Verify -Path .\releases\v1.2.1\*.exe
+```
+
+> ⚠️ Always sign the **app exe before** the installer is built, so the installer
+> embeds the signed exe — then sign the **installer** too.
+
+A good fit for a new open-source project is **Certum Open Source Code Signing**
+(≈ $29/year). Unlike SignPath Foundation it has **no reputation requirement**,
+but it does not provide a *free* certificate.
+
+---
+
 © 2026 **UNLOCK DIGITAL** — *By Eng. Eslam Ashraf*
