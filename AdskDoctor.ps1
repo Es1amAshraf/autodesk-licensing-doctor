@@ -487,7 +487,7 @@ if (Test-Path -LiteralPath $curPath) {
         $curItem = Get-Item -LiteralPath $curPath -Force -ErrorAction Stop
         $curName = Split-Path -Leaf (@($curItem.Target)[0] -replace '[\\/]+$', '')
         if ($curName -and $numbered.Count -and ($numbered.Name -contains $curName) -and $curName -ne $numbered[-1].Name) {
-            Add-Finding WARN 'Licensing' ("AdskLicensing 'Current' points at {0} but {1} is installed" -f $curName, $numbered[-1].Name) ($curPath + ' - reinstall the official licensing service (Repair step)')
+            Add-Finding WARN 'Licensing' ("AdskLicensing 'Current' points at {0} while {1} is installed" -f $curName, $numbered[-1].Name) ($curPath + ' - check this if licensing fails, then reinstall the official licensing service (Repair step)')
         } elseif ($curName) {
             Add-Finding INFO 'Licensing' ("AdskLicensing 'Current' -> {0}" -f $curName) $curPath
         }
