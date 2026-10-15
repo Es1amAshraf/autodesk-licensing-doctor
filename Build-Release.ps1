@@ -12,8 +12,8 @@
   and an entry appended to RELEASES.md.
 
   Examples
-    .\Build-Release.ps1 -Version 1.2.0
-    .\Build-Release.ps1 -Version 1.2.1 -Notes "Fixed ADLS reset" -Recompile
+    .\Build-Release.ps1 -Version 1.2.3
+    .\Build-Release.ps1 -Version 1.2.3 -Notes "Fixed ADLS reset" -Recompile
 #>
 [CmdletBinding()]
 param(

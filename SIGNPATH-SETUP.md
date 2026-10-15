@@ -80,15 +80,19 @@ Settings → Secrets and variables → Actions:
 | Variable | `SIGNPATH_PROJECT_SLUG` | `autodesk-licensing-doctor` |
 | Variable | `SIGNPATH_SIGNING_POLICY_SLUG` | `release-signing` |
 
+Until `SIGNPATH_ORGANIZATION_ID` is set, the *Release (Signed)* workflow skips
+itself instead of failing, so release tags stay green while the SignPath account
+is being approved. Setting the variable is what turns the signing on.
+
 ---
 
 ## 4. Cut the first signed release
 
 From the GitHub UI: Actions → **Release (Signed)** → *Run workflow* → version
-`1.2.1`. Or from a shell:
+`x.y.z`. Or from a shell:
 
 ```powershell
-.\Publish-Release.ps1 -Version 1.2.1 -Notes "Signed release" -Recompile -ViaGitHubActions
+.\Publish-Release.ps1 -Version x.y.z -Notes "Signed release" -Recompile -ViaGitHubActions
 ```
 
 Either way, CI compiles the application exe, has it signed, builds the archives
@@ -116,7 +120,7 @@ is not approved before the timeout the job fails; simply re-run it.
 ## 5. Verify
 
 ```powershell
-Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.1.exe |
+Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.3.exe |
     Format-List Status, @{n='Signer';e={$_.SignerCertificate.Subject}}
 ```
 
@@ -135,7 +139,7 @@ PC"* warning fades only as the certificate builds download reputation.
 | Symptom | Cause / fix |
 |---------|-------------|
 | `Signing request failed: artifact configuration not found` | the slug in the workflow does not match the one in SignPath |
-| `Metadata restriction violated` | the exe's file/product version or company/product name does not match the artifact configuration — check that the `parameters:` block sends `1.2.1.0` for `app-exe` and `1.2.1` for `setup-exe` |
+| `Metadata restriction violated` | the exe's file/product version or company/product name does not match the artifact configuration — check that the `parameters:` block sends `<version>.0` for `app-exe` and `<version>` for `setup-exe` |
 | `Artifact was not uploaded with actions/upload-artifact` | the upload step must run **before** the signing step, and its `artifact-id` output must be passed |
 | Workflow blocked by a policy | SignPath enabled pipeline policies — satisfy the GitHub branch ruleset they require |
 | Signature valid but SmartScreen still warns | expected at first; it fades with downloads |
@@ -149,10 +153,10 @@ If SignPath declines the project, a certificate you own can be used instead. No
 workflow changes are needed:
 
 ```powershell
-.\Build-Release.ps1 -Version 1.2.1 -Recompile     # build first
+.\Build-Release.ps1 -Version 1.2.3 -Recompile     # build first
 .\Sign.ps1 -List                                  # list usable certificates
-.\Sign.ps1 -Path .\releases\v1.2.1\*.exe -Thumbprint <sha1>
-.\Sign.ps1 -Verify -Path .\releases\v1.2.1\*.exe
+.\Sign.ps1 -Path .\releases\v1.2.3\*.exe -Thumbprint <sha1>
+.\Sign.ps1 -Verify -Path .\releases\v1.2.3\*.exe
 ```
 
 Always sign the **application exe before** building the installer, so the

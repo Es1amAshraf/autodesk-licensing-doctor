@@ -18,9 +18,9 @@
                              See SIGNPATH-SETUP.md.
 
   Examples
-    .\Publish-Release.ps1 -Version 1.2.1 -Notes "Fixed ADLS reset" -Recompile
-    .\Publish-Release.ps1 -Version 1.2.1 -Notes "Signed release" -Recompile -ViaGitHubActions
-    .\Publish-Release.ps1 -Version 1.2.1 -Notes "Just build it" -NoGit
+    .\Publish-Release.ps1 -Version 1.2.3 -Notes "Fixed ADLS reset" -Recompile
+    .\Publish-Release.ps1 -Version 1.2.3 -Notes "Signed release" -Recompile -ViaGitHubActions
+    .\Publish-Release.ps1 -Version 1.2.3 -Notes "Just build it" -NoGit
 #>
 [CmdletBinding()]
 param(
