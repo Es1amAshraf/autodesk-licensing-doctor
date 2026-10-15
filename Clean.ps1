@@ -95,8 +95,21 @@ if ($Apply -and -not $SkipBackup) {
 # 1. Stop Autodesk processes
 # ---------------------------------------------------------------------------
 Section 'Stop Autodesk processes'
+# The pattern below also matches OUR OWN executable (UNLOCK-DIGITAL-AdskDoctor),
+# so the toolkit's own process tree is always excluded - stopping it would close
+# the GUI (or console) that launched this cleanup. Both the parent process and
+# the name are checked, so a renamed copy is still safe.
 $procNames = 'acad|revit|3dsmax|maya|civil3d|autocad|adsk|autodesk|lmgrd|adskflex|LMTOOLS'
-$procs = @(Get-Process | Where-Object { $_.ProcessName -match $procNames })
+$selfIds = @([int]$PID)
+try {
+    $me = Get-CimInstance -ClassName Win32_Process -Filter ("ProcessId={0}" -f $PID) -ErrorAction Stop
+    if ($me -and $me.ParentProcessId) { $selfIds += [int]$me.ParentProcessId }
+} catch { }
+$procs = @(Get-Process | Where-Object {
+    $_.ProcessName -match $procNames -and
+    $selfIds -notcontains $_.Id -and
+    $_.ProcessName -notmatch 'AdskDoctor'
+})
 if ($procs.Count -eq 0) {
     Write-Host '  none running' -ForegroundColor DarkGray
 } else {
@@ -107,7 +120,7 @@ if ($procs.Count -eq 0) {
 # 2. Stop Autodesk / FlexNet services
 # ---------------------------------------------------------------------------
 Section 'Stop Autodesk / FlexNet services'
-$svcs = @(Get-Service | Where-Object { $_.Name -match 'adsk|autodesk|flexnet|flexlm' })
+$svcs = @(Get-Service | Where-Object { $_.Name -match 'adsk|autodesk|flexnet|flexlm' -and $_.Name -notmatch 'AdskDoctor' })
 foreach ($s in $svcs) {
     if ($s.Status -eq 'Running') { Step ("Stop service {0}" -f $s.Name) { Stop-Service -Name $s.Name -Force } }
 }
