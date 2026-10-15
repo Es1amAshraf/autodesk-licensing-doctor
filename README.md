@@ -21,16 +21,16 @@ Windows 10 / 11 · GUI in **Arabic + English** · no installation required.
 
 | What | Link |
 |------|------|
-| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.6.exe` (2.1 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.2.6/UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.6.exe) |
+| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.7.exe` (2.1 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.2.7/UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.7.exe) |
 | Portable `.zip` (no install) and full source | [releases page](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest) |
 | Always the newest release | <https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest> |
 
 SHA256 of the files above (also in `SHA256SUMS.txt` on the release page):
 
 ```text
-6B537C2E29DC398A86416164E1744E103FA48BA4F729C98861B6CE4310E5C934  UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.6.exe
-7A0F6A6CC21BA60848DF9ABA0643E7DB5055CDF1FD038481EE1A1DB5B5FE5CE7  AdskDoctor-v1.2.6-Portable.zip
-74DD03EA9D29596397E97E395862C3F92872C656F9B2923C4A386BF24C8209DA  AdskDoctor-v1.2.6-Project.zip
+82D2FE0FF0208B6F1376FD2C81A0ACA58D02E77ADDB4A979970A5CC6EFC7A9B0  UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.7.exe
+3222E043883822BE4816F478D6988C173738A0871E1096A1E63DFFCC010E9F8B  AdskDoctor-v1.2.7-Portable.zip
+F7907F756AA584FE8E4C512958146952FF32C36D81B6F072BAEA5F656B8E5CA1  AdskDoctor-v1.2.7-Project.zip
 ```
 
 See [Verify your download](#verify-your-download).
@@ -174,6 +174,8 @@ diagnostic collects them for you:
 ```
 
 In the app it is the **Support bundle** button; the folder opens when it is done.
+The report itself also prints the failure lines it finds in the newest logs
+(email addresses masked), so the reason is often visible without the zip.
 
 ---
 
@@ -227,7 +229,7 @@ module and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (for the installer 
 
 ```powershell
 # compile the exe and cut a release (Project.zip + Portable.zip + Setup.exe + record)
-.\Build-Release.ps1 -Version 1.2.6 -Notes "..." -Recompile
+.\Build-Release.ps1 -Version 1.2.7 -Notes "..." -Recompile
 ```
 
 Each release is stored under `releases\v<version>\` in **three forms**:
@@ -267,8 +269,8 @@ certificate), sign the built binaries yourself:
 
 ```powershell
 .\Sign.ps1 -List                                    # show usable certificates
-.\Sign.ps1 -Path .\releases\v1.2.6\*.exe -Thumbprint <sha1>
-.\Sign.ps1 -Verify -Path .\releases\v1.2.6\*.exe     # check a release
+.\Sign.ps1 -Path .\releases\v1.2.7\*.exe -Thumbprint <sha1>
+.\Sign.ps1 -Verify -Path .\releases\v1.2.7\*.exe     # check a release
 ```
 
 ---
@@ -313,7 +315,7 @@ verification instructions are in **[CODE-SIGNING.md](CODE-SIGNING.md)**.
 Verify a downloaded file:
 
 ```powershell
-Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.6.exe |
+Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.7.exe |
     Format-List Status, SignerCertificate
 ```
 

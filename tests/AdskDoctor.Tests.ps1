@@ -304,6 +304,15 @@ Describe 'Regression guards' {
         $diag | Should -Match 'system-info\.txt'
     }
 
+    It 'prints the failure lines of the newest log, with email addresses masked' {
+        # "Licensing error - An error occurred" on screen says nothing, and the
+        # log holds the reason; the report shows the lines itself. Logs can carry
+        # the signed-in account, so addresses are masked.
+        $diag = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
+        $diag | Should -Match '-Tail 300'
+        $diag | Should -Match '\*\*\*@\*\*\*'
+    }
+
     It 'offers the support bundle and the installer folder in the UI' {
         $gui = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor-GUI.ps1') -Raw
         $gui | Should -Match 'x:Name="BtnBundle"'

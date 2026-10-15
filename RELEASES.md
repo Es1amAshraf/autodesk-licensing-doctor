@@ -1,5 +1,27 @@
 ﻿# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases
 
+## v1.2.7  (2026-10-15 21:58:53)
+
+A small follow-up to v1.2.6: show the reason, do not only file it away.
+
+The on-screen message ("Licensing error - An error occurred") says nothing, while
+the licensing log holds the actual cause. The report now prints the failure lines
+it finds in the newest logs, so the reason is often visible without opening
+anything else - and with the signed-in email address masked, because that is
+customer data.
+
+Still there from v1.2.6: the -Bundle support bundle (report + the full licensing
+logs + system-info.txt in one zip), the WebView2 / identity / .NET / TLS / pending
+file rename checks, the WebView2 installer switch, the sign-in window profile
+reset, the official-component directions, and a repair that never downloads a
+component from the internet.
+
+Tests: 22 Pester tests in CI.
+
+- `AdskDoctor-v1.2.7-Project.zip`  -  0.13 MB  -  SHA256 `F7907F756AA584FE8E4C512958146952FF32C36D81B6F072BAEA5F656B8E5CA1`
+- `AdskDoctor-v1.2.7-Portable.zip`  -  0.14 MB  -  SHA256 `3222E043883822BE4816F478D6988C173738A0871E1096A1E63DFFCC010E9F8B`
+- `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.7.exe`  -  2.11 MB  -  SHA256 `82D2FE0FF0208B6F1376FD2C81A0ACA58D02E77ADDB4A979970A5CC6EFC7A9B0`
+
 ## v1.2.6  (2026-10-15 21:48:56)
 
 Everything a sign-in failure needs, in one pass.

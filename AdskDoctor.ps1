@@ -752,6 +752,27 @@ if ($script:LogFiles.Count -gt 0) {
     Add-Finding INFO 'Logs' 'No licensing logs found' 'No product has tried to license on this machine yet'
 }
 
+# Show the reason instead of only filing it away: the newest logs are scanned
+# for failure lines and a few of them are printed in the report itself. Email
+# addresses are masked, and the full files go into the -Bundle zip.
+$hintFiles = @($script:LogFiles | Sort-Object LastWriteTime -Descending | Select-Object -First 2)
+$hints = 0
+foreach ($hf in $hintFiles) {
+    if ($hints -ge 8) { break }
+    $tail = @(Get-Content -LiteralPath $hf.FullName -Tail 300 -ErrorAction SilentlyContinue)
+    foreach ($line in $tail) {
+        if ($hints -ge 8) { break }
+        if ($line -notmatch '(?i)\b(error|fail(ed|ure)?|fatal|exception|denied|refused|unable|cannot|timeout|invalid|corrupt|expired|revoked)\b') { continue }
+        $clean = ($line -replace '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}', '***@***').Trim()
+        if ($clean.Length -gt 200) { $clean = $clean.Substring(0, 200) + '...' }
+        Add-Finding INFO 'Logs' ('Log: ' + $clean) $hf.Name
+        $hints++
+    }
+}
+if ($hints -gt 0) {
+    Add-Finding INFO 'Logs' ('{0} failure line(s) taken from the newest licensing logs' -f $hints) 'The full logs are collected by the support bundle (-Bundle)'
+}
+
 # ===========================================================================
 # 5. Installed products - executable signature scan
 # ===========================================================================
