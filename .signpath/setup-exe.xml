@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration - "setup-exe"
+  UNLOCK DIGITAL - Autodesk Licensing Doctor
+
+  Signs the Inno Setup installer
+  UNLOCK-DIGITAL-AdskDoctor-Setup-<version>.exe
+
+  IMPORTANT: build the installer AFTER the app exe has been signed, so that the
+  executable the installer carries is already signed. This configuration only
+  signs the installer itself.
+
+  Create this in SignPath.io under:  Project > Artifact Configurations
+  slug: setup-exe
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <!-- 3-part version, e.g. "1.2.0" - passed from the workflow -->
+    <parameter name="version" required="true" />
+  </parameters>
+
+  <zip-file>
+    <pe-file-set product-name="Autodesk Licensing Doctor"
+                 product-version="${version}"
+                 file-version="${version}"
+                 company-name="UNLOCK DIGITAL"
+                 copyright="Unlock Digital - By Eng. Eslam Ashraf"
+                 original-filename="${file.name}">
+      <include path="UNLOCK-DIGITAL-AdskDoctor-Setup-*.exe" />
+      <for-each>
+        <authenticode-sign />
+      </for-each>
+    </pe-file-set>
+  </zip-file>
+</artifact-configuration>

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration - "app-exe"
+  UNLOCK DIGITAL - Autodesk Licensing Doctor
+
+  Signs the application executable UNLOCK-DIGITAL-AdskDoctor.exe.
+  The workflow uploads that single file with actions/upload-artifact
+  (which stores it as a ZIP), hence the <zip-file> root element.
+
+  Create this in SignPath.io under:  Project > Artifact Configurations
+  slug: app-exe
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <!-- 4-part version, e.g. "1.2.0.0" - passed from the workflow -->
+    <parameter name="version" required="true" />
+  </parameters>
+
+  <zip-file>
+    <pe-file-set product-name="Autodesk Licensing Doctor"
+                 product-version="${version}"
+                 file-version="${version}"
+                 company-name="UNLOCK DIGITAL"
+                 copyright="Unlock Digital - By Eng. Eslam Ashraf"
+                 original-filename="${file.name}">
+      <include path="UNLOCK-DIGITAL-AdskDoctor.exe" />
+      <for-each>
+        <authenticode-sign />
+      </for-each>
+    </pe-file-set>
+  </zip-file>
+</artifact-configuration>

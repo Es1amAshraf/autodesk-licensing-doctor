@@ -140,6 +140,25 @@ Each release is stored under `releases\v<version>\` in **three forms**:
 appended to `RELEASES.md`. Pass `-LegacySetupZip` to emit the old
 `-Setup.zip` script installer instead of the `.exe`.
 
+### Signed releases (CI)
+
+`.github/workflows/release-sign.yml` runs on `windows-latest`, builds the app
+exe, signs it, then builds the zips + installer around the **signed** exe,
+signs the installer too, and publishes the Release. Signing uses
+[SignPath](https://signpath.org), which is **free for open-source projects**.
+Repository configuration needed:
+
+| Kind | Name | Value |
+|------|------|-------|
+| secret | `SIGNPATH_API_TOKEN` | SignPath API token with *submitter* permission |
+| variable | `SIGNPATH_ORGANIZATION_ID` | your SignPath organization id |
+| variable | `SIGNPATH_PROJECT_SLUG` | e.g. `autodesk-licensing-doctor` |
+| variable | `SIGNPATH_SIGNING_POLICY_SLUG` | e.g. `release-signing` |
+
+…plus the two artifact configurations (`app-exe`, `setup-exe`) created in
+SignPath from the files in `.signpath/`. Apply for the free OSS certificate at
+<https://signpath.org/apply>.
+
 ---
 
 ## Project layout
@@ -155,7 +174,37 @@ appended to `RELEASES.md`. Pass `-LegacySetupZip` to emit the old
 | `installer/` | `AdskDoctor.iss` (Inno Setup) + `Install.cmd` / `Install.ps1` / `Uninstall.*` |
 | `make-icon.ps1` | generates `AdskDoctor.ico` (app icon) |
 | `make-logo-icon.ps1` | generates `unlock-logo.ico` (installer / brand icon) from `unlock-logo.png` |
+| `.signpath/` | SignPath artifact configurations (`app-exe`, `setup-exe`) |
+| `.github/workflows/release-sign.yml` | CI: build → sign with SignPath → publish release |
+| `CODE-SIGNING.md` | code signing policy |
+| `PRIVACY.md` | privacy policy |
 | `Run-Diagnostic.cmd`, `Run-Backup.cmd` | self-elevating launchers |
+
+---
+
+## Code signing policy
+
+**Code signing policy:** free code signing provided by
+[SignPath.io](https://about.signpath.io), certificate by
+[SignPath Foundation](https://signpath.org).
+
+Official release binaries (the application `.exe` and the installer `.exe`) are
+compiled on GitHub-hosted runners and signed through SignPath before they are
+published. Roles, the exact list of signed artifacts, the pipeline and
+verification instructions are in **[CODE-SIGNING.md](CODE-SIGNING.md)**.
+
+Verify a downloaded file:
+
+```powershell
+Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.0.exe |
+    Format-List Status, SignerCertificate
+```
+
+---
+
+## Privacy
+
+Nothing is collected and nothing is uploaded — see **[PRIVACY.md](PRIVACY.md)**.
 
 ---
 

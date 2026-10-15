@@ -1,0 +1,160 @@
+name: Release (Signed)
+
+# Builds the app on a GitHub-hosted runner, signs the application exe and the
+# installer with SignPath (free OSS signing - see CODE-SIGNING.md), then
+# publishes a GitHub Release containing the signed artifacts.
+#
+# Required repository configuration:
+#   secret  SIGNPATH_API_TOKEN            - SignPath API token (submitter)
+#   variable SIGNPATH_ORGANIZATION_ID     - SignPath organization id (GUID)
+#   variable SIGNPATH_PROJECT_SLUG        - e.g. autodesk-licensing-doctor
+#   variable SIGNPATH_SIGNING_POLICY_SLUG - e.g. release-signing
+# Artifact configurations (slugs "app-exe" and "setup-exe") must be created in
+# SignPath from the files in .signpath/.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, e.g. 1.2.1'
+        required: true
+        type: string
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # create the GitHub Release
+  actions: read     # required by the SignPath action
+
+jobs:
+  build-sign-release:
+    # SignPath OSS policy requires all jobs to run on GitHub-hosted runners
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------ #
+      # 0) resolve the version
+      # ------------------------------------------------------------------ #
+      - name: Resolve version
+        id: v
+        shell: pwsh
+        run: |
+          $ver = '${{ inputs.version }}'
+          if ([string]::IsNullOrWhiteSpace($ver)) { $ver = '${{ github.ref_name }}' -replace '^v', '' }
+          if ($ver -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid version: '$ver'" }
+          "version=$ver" >> $env:GITHUB_OUTPUT
+          Write-Host "Releasing v$ver"
+
+      - name: Install build dependencies
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module ps2exe -Scope CurrentUser -Force
+          choco install innosetup -y --no-progress
+
+      # ------------------------------------------------------------------ #
+      # 1) compile the app exe (unsigned)                                  #
+      # ------------------------------------------------------------------ #
+      - name: Build unsigned app exe
+        shell: pwsh
+        run: .\Build-Release.ps1 -Version ${{ steps.v.outputs.version }} -Recompile -CompileOnly
+
+      - name: Upload unsigned app exe
+        id: upload-app
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-app-exe
+          path: UNLOCK-DIGITAL-AdskDoctor.exe
+          if-no-files-found: error
+
+      # ------------------------------------------------------------------ #
+      # 2) sign the app exe                                                #
+      # ------------------------------------------------------------------ #
+      - name: Sign app exe (SignPath)
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: app-exe
+          github-artifact-id: ${{ steps.upload-app.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed-app
+          parameters: |
+            version: "${{ steps.v.outputs.version }}.0"
+
+      - name: Verify signed app exe
+        shell: pwsh
+        run: |
+          $f = 'signed-app\UNLOCK-DIGITAL-AdskDoctor.exe'
+          if (-not (Test-Path $f)) { throw "SignPath produced no signed app exe" }
+          $sig = Get-AuthenticodeSignature $f
+          $sig | Format-List Status, @{n='Signer';e={$_.SignerCertificate.Subject}}
+          if ($sig.Status -ne 'Valid') { throw "Signature invalid: $($sig.Status)" }
+          Copy-Item $f . -Force
+
+      # ------------------------------------------------------------------ #
+      # 3) build zips + installer around the SIGNED app exe                #
+      # ------------------------------------------------------------------ #
+      - name: Build release artifacts
+        shell: pwsh
+        run: |
+          .\Build-Release.ps1 -Version ${{ steps.v.outputs.version }} `
+            -Notes "Automated signed release v${{ steps.v.outputs.version }} (code signing by SignPath Foundation - see CODE-SIGNING.md)."
+
+      - name: Upload unsigned setup exe
+        id: upload-setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-setup-exe
+          path: releases\v${{ steps.v.outputs.version }}\UNLOCK-DIGITAL-AdskDoctor-Setup-*.exe
+          if-no-files-found: error
+
+      # ------------------------------------------------------------------ #
+      # 4) sign the installer                                              #
+      # ------------------------------------------------------------------ #
+      - name: Sign setup exe (SignPath)
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: setup-exe
+          github-artifact-id: ${{ steps.upload-setup.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed-setup
+          parameters: |
+            version: "${{ steps.v.outputs.version }}"
+
+      # ------------------------------------------------------------------ #
+      # 5) publish                                                         #
+      # ------------------------------------------------------------------ #
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ver = '${{ steps.v.outputs.version }}'
+          $rel = "releases\v$ver"
+
+          $signed = Get-ChildItem 'signed-setup\*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $signed) { throw "SignPath produced no signed installer" }
+          Copy-Item $signed.FullName $rel -Force
+
+          $setup = Join-Path $rel "UNLOCK-DIGITAL-AdskDoctor-Setup-$ver.exe"
+          (Get-AuthenticodeSignature $setup) | Format-List Status, @{n='Signer';e={$_.SignerCertificate.Subject}}
+          if ((Get-AuthenticodeSignature $setup).Status -ne 'Valid') { throw "Installer is not validly signed" }
+
+          gh release create "v$ver" `
+            $setup `
+            "$rel\AdskDoctor-v$ver-Portable.zip" `
+            "$rel\AdskDoctor-v$ver-Project.zip" `
+            --title "v$ver" `
+            --notes "Signed release v$ver. Signed by SignPath Foundation - see CODE-SIGNING.md." `
+            --verify-tag

@@ -26,6 +26,9 @@ param(
     # Re-encode the GUI script (UTF-8 BOM, required for Arabic) and recompile the exe
     [switch]$Recompile,
 
+    # Recompile the exe only, then stop (used by CI before code signing)
+    [switch]$CompileOnly,
+
     # Use the legacy ZIP-based installer instead of the Inno Setup .exe
     [switch]$LegacySetupZip,
 
@@ -110,6 +113,10 @@ if ($Recompile) {
     powershell -NoProfile -ExecutionPolicy Bypass -Command $cmd | Out-Null
     if (-not (Test-Path $exe)) { throw "Recompile failed: exe not produced." }
     Write-Ok ("Compiled " + $exeName)
+}
+if ($CompileOnly) {
+    Write-Ok ("Compile-only: " + $exeName + " is ready (nothing else was built).")
+    return
 }
 if (-not (Test-Path $exe)) { throw "Executable not found: $exe  (run once with -Recompile)" }
 
