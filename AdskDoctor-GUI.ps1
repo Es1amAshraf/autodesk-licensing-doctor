@@ -7,14 +7,14 @@
     Loads a company logo (unlock-logo.png) from this folder if present.
 
     Run:  powershell -STA -ExecutionPolicy Bypass -File .\AdskDoctor-GUI.ps1
-          powershell -STA -ExecutionPolicy Bypass -File .\AdskDoctor-GUI.ps1 -Lang en
+          powershell -STA -ExecutionPolicy Bypass -File .\AdskDoctor-GUI.ps1 -Lang ar
 #>
 
 param(
-    # Language the window opens in: 'ar' (default) or 'en'. The toggle button
+    # Language the window opens in: 'en' (default) or 'ar'. The toggle button
     # still switches between the two at runtime.
     [ValidateSet('ar', 'en')]
-    [string]$Lang = 'ar'
+    [string]$Lang = 'en'
 )
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Xaml
@@ -25,7 +25,7 @@ if ([System.Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') {
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         $psi.FileName = (Get-Command powershell).Source
         $extra = ''
-        if ($Lang -and $Lang -ne 'ar') { $extra = ' -Lang ' + $Lang }
+        if ($Lang -and $Lang -ne 'en') { $extra = ' -Lang ' + $Lang }
         $psi.Arguments = ('-NoProfile -STA -ExecutionPolicy Bypass -File "{0}"{1}' -f $PSCommandPath, $extra)
         [System.Diagnostics.Process]::Start($psi) | Out-Null
         exit
@@ -487,6 +487,7 @@ function Show-Picker {
     param([string[]]$Items, [string]$Title)
     [xml]$px = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="pick" Height="320" Width="380" WindowStartupLocation="CenterOwner"
         Background="#F1F2F4" FontFamily="Segoe UI" FlowDirection="RightToLeft">
   <Grid Margin="14">

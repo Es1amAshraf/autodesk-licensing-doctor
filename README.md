@@ -21,7 +21,7 @@ Windows 10 / 11 · GUI in **Arabic + English** · no installation required.
 
 | What | Link |
 |------|------|
-| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.2.exe` (2.1 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.2.2/UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.2.exe) |
+| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.3.exe` (2.1 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.2.3/UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.3.exe) |
 | Portable `.zip` (no install) and full source | [releases page](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest) |
 | Always the newest release | <https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest> |
 
@@ -155,7 +155,7 @@ module and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (for the installer 
 
 ```powershell
 # compile the exe and cut a release (Project.zip + Portable.zip + Setup.exe + record)
-.\Build-Release.ps1 -Version 1.2.2 -Notes "..." -Recompile
+.\Build-Release.ps1 -Version 1.2.3 -Notes "..." -Recompile
 ```
 
 Each release is stored under `releases\v<version>\` in **three forms**:
@@ -195,8 +195,8 @@ certificate), sign the built binaries yourself:
 
 ```powershell
 .\Sign.ps1 -List                                    # show usable certificates
-.\Sign.ps1 -Path .\releases\v1.2.2\*.exe -Thumbprint <sha1>
-.\Sign.ps1 -Verify -Path .\releases\v1.2.2\*.exe     # check a release
+.\Sign.ps1 -Path .\releases\v1.2.3\*.exe -Thumbprint <sha1>
+.\Sign.ps1 -Verify -Path .\releases\v1.2.3\*.exe     # check a release
 ```
 
 ---
@@ -205,7 +205,7 @@ certificate), sign the built binaries yourself:
 
 | Path | Purpose |
 |------|---------|
-| `AdskDoctor-GUI.ps1` | WPF bilingual (AR/EN) GUI — `-Lang en` opens it in English |
+| `AdskDoctor-GUI.ps1` | WPF bilingual (EN/AR) GUI - English by default, `-Lang ar` opens it in Arabic |
 | `AdskDoctor.ps1` | Phase 1 — diagnostic engine |
 | `Backup.ps1` | Phase 2 — layered backup + `UNDO.ps1` generator |
 | `Clean.ps1` | Phase 3 — cleanup (preview by default) |
@@ -241,7 +241,7 @@ verification instructions are in **[CODE-SIGNING.md](CODE-SIGNING.md)**.
 Verify a downloaded file:
 
 ```powershell
-Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.2.exe |
+Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.3.exe |
     Format-List Status, SignerCertificate
 ```
 
