@@ -157,4 +157,4 @@ jobs:
             "$rel\AdskDoctor-v$ver-Project.zip" `
             --title "v$ver" `
             --notes "Signed release v$ver. Signed by SignPath Foundation - see CODE-SIGNING.md." `
-            --verify-tag
+            --target ${{ github.sha }}

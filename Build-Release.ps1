@@ -304,8 +304,20 @@ foreach ($a in $artifacts) {
     $entry += "- ``$(Split-Path $a -Leaf)``  -  $([math]::Round((Get-Item $a).Length/1MB,2)) MB  -  SHA256 ``$(Get-Sha256 $a)```r`n"
 }
 $entry += "`r`n"
-if (Test-Path $log) { Add-Content -LiteralPath $log -Value $entry -Encoding UTF8 }
-else { Save-Text $log ($header + $entry) }
+
+# Rebuild the log instead of appending: this version's entry goes on top and any
+# previous entry for the SAME version is dropped, so re-building a release does
+# not pile up duplicates.
+$older = @()
+if (Test-Path $log) {
+    $txt = [System.IO.File]::ReadAllText($log)
+    $i = $txt.IndexOf('## v')
+    if ($i -ge 0) { $txt = $txt.Substring($i) }
+    $older = @([regex]::Split($txt, '(?m)(?=^## v)') |
+        Where-Object { $_.Trim().Length -gt 0 } |
+        Where-Object { $_ -notmatch ('^## v' + [regex]::Escape($Version) + '\b') })
+}
+Save-Text $log ($header + $entry + ($older -join ''))
 
 Write-Host ""
 Write-Ok "Release v$Version ready:"

@@ -82,10 +82,12 @@ if (-not $NoGit) {
 # 1) build
 # ---------------------------------------------------------------------------
 Write-Step "Building release artifacts (Build-Release.ps1) ..."
-$buildArgs = @('-Version', $Version)
-if ($Notes)     { $buildArgs += @('-Notes', $Notes) }
-if ($Recompile) { $buildArgs += '-Recompile' }
-& (Join-Path $root 'Build-Release.ps1') @buildArgs
+# NOTE: hashtable splatting (not an array) - an array would pass the elements
+# positionally and bind "-Version" as the *value* of -Version.
+$buildScript = Join-Path $root 'Build-Release.ps1'
+$buildParams = @{ Version = $Version; Notes = $Notes }
+if ($Recompile) { $buildParams['Recompile'] = $true }
+& $buildScript @buildParams
 if (-not $?) { throw "Build failed." }
 
 $relDir    = Join-Path $root ("releases\v" + $Version)
