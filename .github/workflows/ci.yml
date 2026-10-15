@@ -53,18 +53,32 @@ jobs:
           }
           Write-Host "No analyzer errors."
 
-      - name: Build the app exe (compile check)
+      - name: Build the release (dry run)
         shell: pwsh
         run: |
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
           Install-Module ps2exe -Scope CurrentUser -Force
-          # The release build compiles with Windows PowerShell 5.1 on purpose, so
-          # ps2exe has to be installed for that host too ("CurrentUser" under pwsh
-          # installs into Documents\PowerShell\Modules, which 5.1 never looks at).
+          # The build compiles the app exe with Windows PowerShell 5.1 on purpose
+          # (a 5.1-based exe runs on a stock Windows 10/11, a PowerShell 7 build
+          # would need PowerShell 7 on the client machine), so ps2exe has to be
+          # installed for that host too: "Install-Module -Scope CurrentUser" under
+          # pwsh lands in Documents\PowerShell\Modules, which 5.1 never looks at.
           powershell -NoProfile -ExecutionPolicy Bypass -Command "Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue; Install-Module ps2exe -Scope CurrentUser -Force"
-          .\Build-Release.ps1 -Version 0.0.0 -Recompile -CompileOnly
-          if (-not (Test-Path 'UNLOCK-DIGITAL-AdskDoctor.exe')) { throw 'the build produced no app exe' }
-          Write-Host 'The app exe compiles.'
+          choco install innosetup -y --no-progress
+          # A throwaway version: it builds into releases\v0.0.0 and is never
+          # published. This is the same script the release workflow runs, so a
+          # broken exe, archive or installer fails here instead of at release time.
+          .\Build-Release.ps1 -Version 0.0.0 -Recompile -Notes 'Dry run (CI)'
+          $expected = @(
+            'UNLOCK-DIGITAL-AdskDoctor.exe',
+            'releases\v0.0.0\AdskDoctor-v0.0.0-Project.zip',
+            'releases\v0.0.0\AdskDoctor-v0.0.0-Portable.zip',
+            'releases\v0.0.0\UNLOCK-DIGITAL-AdskDoctor-Setup-0.0.0.exe'
+          )
+          foreach ($f in $expected) {
+            if (-not (Test-Path -LiteralPath $f)) { throw "the build produced no $f" }
+          }
+          Write-Host 'The exe, both archives and the installer all build.'
 
       - name: Validate SignPath artifact configurations
         shell: pwsh
