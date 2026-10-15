@@ -1,5 +1,26 @@
 ﻿# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases
 
+## v1.2.8  (2026-10-15 22:41:17)
+
+The action panel now fits the window it opens in.
+
+The panel on the left gained a button with every release while the default window
+height stayed the same, so on screens with display scaling the hint under the
+buttons was cut off in the middle of its last line. The buttons and the hint are
+compact again, and the panel scrolls when the window is shorter than its content,
+so nothing on that side is ever silently clipped - in both languages, at any
+scaling.
+
+Everything else is unchanged from v1.2.7: the diagnostic that names the failure,
+the support bundle, the sign-in prerequisite checks and the cleanup/repair that
+only ever installs the official components you give it.
+
+Tests: 22 Pester tests in CI.
+
+- `AdskDoctor-v1.2.8-Project.zip`  -  0.13 MB  -  SHA256 `338EECEC8384EC5102533C225B78F9A9C6EEB576078AD97CCB99D17C86A31AB9`
+- `AdskDoctor-v1.2.8-Portable.zip`  -  0.14 MB  -  SHA256 `1F73B3646E268D0ABC3C38CE29C8F189E0BB52F03555C22092CED548DCD6D516`
+- `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.8.exe`  -  2.11 MB  -  SHA256 `D85902D026F71467D1D5A562F4A7B14E6A60F47CE13834946794928B655BB950`
+
 ## v1.2.7  (2026-10-15 21:58:53)
 
 A small follow-up to v1.2.6: show the reason, do not only file it away.

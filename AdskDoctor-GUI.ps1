@@ -210,20 +210,24 @@ function T { param([string]$k) $L[$script:lang][$k] }
       </Grid.ColumnDefinitions>
 
       <!-- Action buttons -->
+      <!-- The panel scrolls, so a short window never cuts the tip line in half
+           (the buttons grew with every release and the default height is fixed). -->
       <Border Grid.Column="0" Background="White" CornerRadius="10" Padding="14" Margin="0,0,14,0">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <StackPanel>
-          <TextBlock x:Name="ActionsLabel" Text="Actions" FontSize="15" FontWeight="SemiBold" Foreground="#333" Margin="0,0,0,10"/>
-          <Button x:Name="BtnDiag"   Content="" Height="44" Margin="0,0,0,8" FontSize="13"/>
-          <Button x:Name="BtnBackup" Content="" Height="44" Margin="0,0,0,8" FontSize="13"/>
-          <Button x:Name="BtnClean"  Content="" Height="44" Margin="0,0,0,8" FontSize="13"/>
-          <Button x:Name="BtnRepair" Content="" Height="44" Margin="0,0,0,8" FontSize="13"/>
-          <Button x:Name="BtnUndo"   Content="" Height="44" Margin="0,0,0,8" FontSize="13"/>
-          <Separator Margin="0,8,0,8"/>
-          <Button x:Name="BtnDownload" Content="" Height="40" Margin="0,0,0,8" FontSize="13" Background="#E41E2E" Foreground="White" FontWeight="SemiBold"/>
-          <Button x:Name="BtnReport" Content="" Height="36" Margin="0,0,0,8" FontSize="13"/>
-          <Button x:Name="BtnBundle" Content="" Height="36" Margin="0,0,0,8" FontSize="13"/>
-          <TextBlock x:Name="TipText" TextWrapping="Wrap" Foreground="#8A8F99" FontSize="11" Margin="0,14,0,0"/>
+          <TextBlock x:Name="ActionsLabel" Text="Actions" FontSize="15" FontWeight="SemiBold" Foreground="#333" Margin="0,0,0,8"/>
+          <Button x:Name="BtnDiag"   Content="" Height="40" Margin="0,0,0,6" FontSize="13"/>
+          <Button x:Name="BtnBackup" Content="" Height="40" Margin="0,0,0,6" FontSize="13"/>
+          <Button x:Name="BtnClean"  Content="" Height="40" Margin="0,0,0,6" FontSize="13"/>
+          <Button x:Name="BtnRepair" Content="" Height="40" Margin="0,0,0,6" FontSize="13"/>
+          <Button x:Name="BtnUndo"   Content="" Height="40" Margin="0,0,0,6" FontSize="13"/>
+          <Separator Margin="0,6,0,6"/>
+          <Button x:Name="BtnDownload" Content="" Height="38" Margin="0,0,0,6" FontSize="13" Background="#E41E2E" Foreground="White" FontWeight="SemiBold"/>
+          <Button x:Name="BtnReport" Content="" Height="34" Margin="0,0,0,6" FontSize="13"/>
+          <Button x:Name="BtnBundle" Content="" Height="34" Margin="0,0,0,6" FontSize="13"/>
+          <TextBlock x:Name="TipText" TextWrapping="Wrap" Foreground="#8A8F99" FontSize="11" Margin="0,10,0,0"/>
         </StackPanel>
+        </ScrollViewer>
       </Border>
 
       <!-- Log output -->
