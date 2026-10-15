@@ -1,0 +1,86 @@
+name: Bug report
+description: Something in the toolkit does not work as expected
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please **do not paste licence keys, serial numbers or
+        client names** — this is a public issue tracker.
+        For security problems use the private link in SECURITY.md instead.
+
+  - type: input
+    id: version
+    attributes:
+      label: Toolkit version
+      description: Shown in the GUI footer, or the file name of the release you downloaded
+      placeholder: "1.2.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Which phase?
+      options:
+        - 1 - Diagnostic
+        - 2 - Backup
+        - 3 - Cleanup
+        - 4 - Repair / reinstall
+        - GUI / installer
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 10 22H2 / Windows 11 24H2 (x64)"
+    validations:
+      required: true
+
+  - type: input
+    id: product
+    attributes:
+      label: Autodesk product(s) affected
+      placeholder: "AutoCAD 2024, Revit 2023 ..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened?
+      description: Paste the exact error message. Redact anything private.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Was it a preview or an -Apply run?
+      options:
+        - Preview (read-only / default)
+        - -Apply (made changes)
+        - Not applicable
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I did **not** run this against a system with no backup
+          required: true
+        - label: I searched existing issues first
+          required: true

@@ -176,8 +176,12 @@ SignPath from the files in `.signpath/`. Apply for the free OSS certificate at
 | `make-logo-icon.ps1` | generates `unlock-logo.ico` (installer / brand icon) from `unlock-logo.png` |
 | `.signpath/` | SignPath artifact configurations (`app-exe`, `setup-exe`) |
 | `.github/workflows/release-sign.yml` | CI: build → sign with SignPath → publish release |
+| `.github/workflows/ci.yml` | CI: parse + lint + config validation |
+| `Publish-Release.ps1` | one-command release: build → commit → push → publish |
+| `SIGNPATH-SETUP.md` | step-by-step guide to enabling code signing |
 | `CODE-SIGNING.md` | code signing policy |
 | `PRIVACY.md` | privacy policy |
+| `SECURITY.md` | security policy / how to report a vulnerability |
 | `Run-Diagnostic.cmd`, `Run-Backup.cmd` | self-elevating launchers |
 
 ---

@@ -1,0 +1,83 @@
+name: CI
+
+# Fast sanity checks on every push / pull request:
+#   - every PowerShell file parses
+#   - PSScriptAnalyzer reports no errors
+#   - the SignPath artifact configurations are well-formed
+#   - the build script is present and self-consistent
+#
+# The heavier "build + sign + publish" flow lives in release-sign.yml.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse all PowerShell files
+        shell: pwsh
+        run: |
+          $bad = 0
+          Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object {
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errors)
+            if ($errors -and $errors.Count) {
+              $bad++
+              Write-Host "::error file=$($_.FullName)::$($errors.Count) parse error(s)"
+              $errors | ForEach-Object { Write-Host "    $($_.Message)" }
+            } else {
+              Write-Host "OK   $($_.Name)"
+            }
+          }
+          if ($bad) { throw "$bad file(s) failed to parse" }
+
+      - name: PSScriptAnalyzer (errors only)
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          $res = Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error
+          if ($res) {
+            $res | Format-Table -AutoSize
+            throw "$($res.Count) PSScriptAnalyzer error(s)"
+          }
+          Write-Host "No analyzer errors."
+
+      - name: Validate SignPath artifact configurations
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem .signpath\*.xml -ErrorAction SilentlyContinue
+          if (-not $files) { throw "No artifact configurations found in .signpath/" }
+          foreach ($f in $files) {
+            try {
+              [xml]$x = Get-Content $f -Raw
+              if ($x.DocumentElement.LocalName -ne 'artifact-configuration') { throw "unexpected root element" }
+              Write-Host "OK   $($f.Name)"
+            } catch {
+              Write-Host "::error file=$($f.FullName)::$($_.Exception.Message)"
+              throw
+            }
+          }
+
+      - name: Verify build script inputs
+        shell: pwsh
+        run: |
+          $required = @(
+            'Build-Release.ps1', 'AdskDoctor-GUI.ps1', 'AdskDoctor.ps1', 'Backup.ps1',
+            'Clean.ps1', 'Repair.ps1', 'AdskDoctor.ico', 'unlock-logo.ico',
+            'make-logo-icon.ps1', 'installer\AdskDoctor.iss', 'LICENSE', 'README.md',
+            'CODE-SIGNING.md', 'PRIVACY.md'
+          )
+          $missing = @($required | Where-Object { -not (Test-Path $_) })
+          if ($missing) { throw ("Missing required file(s): " + ($missing -join ', ')) }
+          Write-Host "All required build inputs are present."
