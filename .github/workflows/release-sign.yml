@@ -84,6 +84,7 @@ jobs:
           artifact-configuration-slug: app-exe
           github-artifact-id: ${{ steps.upload-app.outputs.artifact-id }}
           wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
           output-artifact-directory: signed-app
           parameters: |
             version: "${{ steps.v.outputs.version }}.0"
@@ -128,6 +129,7 @@ jobs:
           artifact-configuration-slug: setup-exe
           github-artifact-id: ${{ steps.upload-setup.outputs.artifact-id }}
           wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
           output-artifact-directory: signed-setup
           parameters: |
             version: "${{ steps.v.outputs.version }}"

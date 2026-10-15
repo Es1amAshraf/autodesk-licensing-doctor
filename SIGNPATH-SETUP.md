@@ -106,6 +106,24 @@ Both paths: CI compiles the exe, SignPath signs it, the zips + installer are
 built around the **signed** exe, the installer is signed, and the Release is
 published.
 
+### ⚠️ Approve the signing request
+
+**Every signing request must be approved manually** — that is a SignPath
+Foundation rule, not an option.
+
+1. Start the workflow (or push the tag).
+2. Within a few minutes SignPath shows a *pending signing request* — you get a
+   notification e-mail, and the request also appears in the SignPath UI
+   (*Signing Requests*).
+3. **Approve it.** The workflow is sitting there waiting; it is configured to
+   wait up to **1 hour** (`wait-for-completion-timeout-in-seconds: 3600`).
+4. Signing then completes and the release is published automatically.
+
+If you don't approve in time, the job fails after the timeout — just re-run it
+and approve faster. (There are **two** requests per release: the app exe first,
+then the installer. Approve both; the second one appears only after the first
+completes.)
+
 ---
 
 ## Stage 5 — verify
