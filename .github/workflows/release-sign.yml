@@ -29,6 +29,11 @@ permissions:
 
 jobs:
   build-sign-release:
+    # Nothing can be signed until the SignPath configuration exists (see
+    # CODE-SIGNING.md). Gating the job keeps every release tag from reporting a
+    # failed run; as soon as the variable is set the workflow signs on its own.
+    if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+
     # SignPath OSS policy requires all jobs to run on GitHub-hosted runners
     runs-on: windows-latest
 
@@ -53,8 +58,16 @@ jobs:
         shell: pwsh
         run: |
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          # Build-Release.ps1 compiles the app exe with Windows PowerShell 5.1 on
+          # purpose: a 5.1-based exe runs on a stock Windows 10/11, while a
+          # PowerShell 7 build would require PowerShell 7 on the client machine.
+          # "Install-Module -Scope CurrentUser" under pwsh lands in
+          # Documents\PowerShell\Modules, which 5.1 does not look at, so the
+          # module has to be installed for both hosts.
           Install-Module ps2exe -Scope CurrentUser -Force
+          powershell -NoProfile -ExecutionPolicy Bypass -Command "Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue; Install-Module ps2exe -Scope CurrentUser -Force"
           choco install innosetup -y --no-progress
+          powershell -NoProfile -Command "Get-Module -ListAvailable ps2exe | Format-Table Name,Version,ModuleBase -AutoSize"
 
       # ------------------------------------------------------------------ #
       # 1) compile the app exe (unsigned)                                  #

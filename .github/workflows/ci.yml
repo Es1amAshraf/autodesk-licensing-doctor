@@ -53,6 +53,19 @@ jobs:
           }
           Write-Host "No analyzer errors."
 
+      - name: Build the app exe (compile check)
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+          Install-Module ps2exe -Scope CurrentUser -Force
+          # The release build compiles with Windows PowerShell 5.1 on purpose, so
+          # ps2exe has to be installed for that host too ("CurrentUser" under pwsh
+          # installs into Documents\PowerShell\Modules, which 5.1 never looks at).
+          powershell -NoProfile -ExecutionPolicy Bypass -Command "Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue; Install-Module ps2exe -Scope CurrentUser -Force"
+          .\Build-Release.ps1 -Version 0.0.0 -Recompile -CompileOnly
+          if (-not (Test-Path 'UNLOCK-DIGITAL-AdskDoctor.exe')) { throw 'the build produced no app exe' }
+          Write-Host 'The app exe compiles.'
+
       - name: Validate SignPath artifact configurations
         shell: pwsh
         run: |

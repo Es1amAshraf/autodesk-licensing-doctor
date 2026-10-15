@@ -115,13 +115,25 @@ if ($Recompile) {
     $before = $null
     if (Test-Path -LiteralPath $exe) { $before = (Get-Item -LiteralPath $exe).LastWriteTimeUtc }
 
+    # The exe is compiled with Windows PowerShell 5.1 on purpose: a 5.1-based
+    # ps2exe build runs on a stock Windows 10/11, while a PowerShell 7 build would
+    # require PowerShell 7 on the client machine. Check up front that the module
+    # is importable there - otherwise the failure only shows up as the bare
+    # "exe not produced" message, which says nothing about the reason.
+    $probe = powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Get-Module -ListAvailable ps2exe) { 'ok' } else { 'missing' }" 2>&1
+    if (([string]($probe -join ' ')) -notmatch 'ok') {
+        throw ('ps2exe is not installed for Windows PowerShell 5.1. Install it with: ' +
+               'powershell -NoProfile -Command "Install-Module ps2exe -Scope CurrentUser -Force"')
+    }
+
     $cmd = "Import-Module ps2exe; Invoke-PS2EXE -inputFile '$gui' -outputFile '$exe' -iconFile '$icon' " +
            "-STA -noConsole -requireAdmin -x64 -title 'Autodesk Licensing Doctor' " +
            "-description 'Autodesk licensing cleanup and repair' -company 'UNLOCK DIGITAL' " +
            "-product 'Autodesk Licensing Doctor' -copyright 'Unlock Digital - By Eng. Eslam Ashraf' " +
            "-version '$Version.0'"
     $compileOut = powershell -NoProfile -ExecutionPolicy Bypass -Command $cmd 2>&1
-    $compileOut | ForEach-Object { if ($_ -is [string]) { Write-Host ("      " + $_) -ForegroundColor DarkGray } }
+    # print everything (including errors) so a failed compile is diagnosable
+    $compileOut | ForEach-Object { Write-Host ("      " + ([string]$_).TrimEnd()) -ForegroundColor DarkGray }
 
     $fi = Get-Item -LiteralPath $exe -ErrorAction SilentlyContinue
     if (-not $fi) { throw "Recompile failed: exe not produced." }
