@@ -105,14 +105,33 @@ foreach ($p in @(
 if ($Recompile) {
     Write-Step "Re-encoding GUI (UTF-8 BOM) and recompiling exe ..."
     New-BomFile $gui
+    # ps2exe cannot overwrite a running exe; detect it up front instead of
+    # silently shipping the previous build.
+    $running = @(Get-Process -Name ([IO.Path]::GetFileNameWithoutExtension($exeName)) -ErrorAction SilentlyContinue)
+    if ($running.Count) {
+        throw ("Close " + $exeName + " first (it is running, pid " +
+               (($running | ForEach-Object { $_.Id }) -join ', ') + ").")
+    }
+    $before = $null
+    if (Test-Path -LiteralPath $exe) { $before = (Get-Item -LiteralPath $exe).LastWriteTimeUtc }
+
     $cmd = "Import-Module ps2exe; Invoke-PS2EXE -inputFile '$gui' -outputFile '$exe' -iconFile '$icon' " +
            "-STA -noConsole -requireAdmin -x64 -title 'Autodesk Licensing Doctor' " +
            "-description 'Autodesk licensing cleanup and repair' -company 'UNLOCK DIGITAL' " +
            "-product 'Autodesk Licensing Doctor' -copyright 'Unlock Digital - By Eng. Eslam Ashraf' " +
            "-version '$Version.0'"
-    powershell -NoProfile -ExecutionPolicy Bypass -Command $cmd | Out-Null
-    if (-not (Test-Path $exe)) { throw "Recompile failed: exe not produced." }
-    Write-Ok ("Compiled " + $exeName)
+    $compileOut = powershell -NoProfile -ExecutionPolicy Bypass -Command $cmd 2>&1
+    $compileOut | ForEach-Object { if ($_ -is [string]) { Write-Host ("      " + $_) -ForegroundColor DarkGray } }
+
+    $fi = Get-Item -LiteralPath $exe -ErrorAction SilentlyContinue
+    if (-not $fi) { throw "Recompile failed: exe not produced." }
+    if ($before -and $fi.LastWriteTimeUtc -le $before) {
+        throw ("Recompile failed: " + $exeName + " was not updated (still the previous build).")
+    }
+    if ($fi.VersionInfo.FileVersion -ne "$Version.0") {
+        Write-Warn2 ("File version is " + $fi.VersionInfo.FileVersion + ", expected $Version.0")
+    }
+    Write-Ok ("Compiled " + $exeName + "  (" + [math]::Round($fi.Length / 1KB, 1) + " KB, v" + $fi.VersionInfo.FileVersion + ")")
 }
 if ($CompileOnly) {
     Write-Ok ("Compile-only: " + $exeName + " is ready (nothing else was built).")

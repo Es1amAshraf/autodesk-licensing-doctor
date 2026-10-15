@@ -1,149 +1,132 @@
-# Enabling code signing (SignPath Foundation — free for open source)
+# Enabling code signing (SignPath Foundation)
 
-This is the checklist to go from **"Unknown Publisher"** to a properly signed
-release. Everything that can be prepared in the repository is already done —
-what follows is only the account/UI part.
+Maintainer checklist for taking the project from the Windows *"Unknown
+Publisher"* prompt to properly signed releases. Everything that lives in the
+repository is already in place; the remaining steps happen in the SignPath and
+GitHub user interfaces.
 
 Repository files involved:
 
 | File | Purpose |
 |------|---------|
-| `CODE-SIGNING.md` | the code signing policy (required by SignPath) |
+| `CODE-SIGNING.md` | code signing policy (linked from the README) |
 | `PRIVACY.md` | privacy policy (linked from the policy) |
-| `.signpath/app-exe.xml` | artifact configuration — signs the app exe |
-| `.signpath/setup-exe.xml` | artifact configuration — signs the installer |
-| `.github/workflows/release-sign.yml` | CI: build → sign → sign → publish |
+| `.signpath/app-exe.xml` | SignPath artifact configuration for the application exe |
+| `.signpath/setup-exe.xml` | SignPath artifact configuration for the installer |
+| `.github/workflows/release-sign.yml` | CI: build, sign, package, publish |
 
 ---
 
-## Stage 0 — prerequisites (you)
+## Prerequisites
 
-- [ ] **Turn on two-factor authentication on GitHub.** SignPath's conditions
-      require MFA for every team member on both SignPath and the source
-      repository. <https://github.com/settings/security>
-- [ ] The repository is **public** and licensed with an **OSI license** — ✅ MIT.
-- [ ] The project is already **released** and **documented** — ✅ v1.2.0 + README.
-- [ ] Nothing about the project is proprietary — ✅ pure PowerShell.
-- [ ] A **contact e-mail** you want to use for the application.
+- Two-factor authentication enabled on the GitHub account. SignPath requires MFA
+  for every member of the organization and of the source repository.
+  <https://github.com/settings/security>
+- The repository is public and carries an OSI license (MIT).
+- The project is already released and documented.
+- A contact e-mail address for the application.
 
 ---
 
-## Stage 1 — apply (you)
+## 1. Apply
 
-Apply at **<https://signpath.org/apply>** (they review manually, expect a few
-days). Point them at:
+Apply at <https://signpath.org/apply>. Reviews are manual; expect a few days.
 
 ```
 Repository : https://github.com/Es1amAshraf/autodesk-licensing-doctor
 License    : MIT (OSI approved)
-Policy     : CODE-SIGNING.md   (linked from README.md)
+Policy     : CODE-SIGNING.md (linked from README.md)
 Artifacts  : UNLOCK-DIGITAL-AdskDoctor.exe
              UNLOCK-DIGITAL-AdskDoctor-Setup-<version>.exe
 ```
 
-**How to describe the project if they ask.** The tool **detects and removes
-traces of pirated/patched Autodesk software** and **restores the official
-Autodesk licensing components** so a genuine subscription works again. It
-contains no crack, keygen, bypass or license generator. This matters because of
-their *"No hacking tools"* clause, which explicitly **does** allow:
-
-> features that detect *actual* security breaches, e.g. traces of being hacked,
-> presence of malware or potentially unwanted programs
-
-Also relevant (all in our favour): the tool warns before changing anything,
-runs read-only by default, takes a backup first and ships an uninstaller.
+The program contains no crack, keygen, patch, license generator or bypass: it
+removes leftovers of non-genuine Autodesk patches and restores the official
+Autodesk licensing components. It changes nothing unless explicitly asked to, it
+takes a backup first, and it ships an uninstaller.
 
 ---
 
-## Stage 2 — set up SignPath (you, after approval)
+## 2. Set up SignPath (after approval)
 
-1. **Trusted build system** — add the predefined *GitHub.com* connector to your
-   organization, and (optional but recommended) install the
-   [SignPath GitHub App](https://github.com/apps/signpath) on the repo.
-2. **Project** — create a project, slug: `autodesk-licensing-doctor`.
-   Link the GitHub.com trusted build system to it.
-3. **Signing policy** — create one, slug: `release-signing`, with an
+1. **Trusted build system** — add the predefined *GitHub.com* connector to the
+   organization. Optionally install the
+   [SignPath GitHub App](https://github.com/apps/signpath) on the repository.
+2. **Project** — create one with slug `autodesk-licensing-doctor` and link the
+   GitHub.com trusted build system to it.
+3. **Signing policy** — create one with slug `release-signing`, using an
    *Authenticode* certificate and the **SignPath Foundation** certificate.
-4. **Artifact configurations** — create two, by pasting the contents of:
-   - slug `app-exe` ← `.signpath/app-exe.xml`
-   - slug `setup-exe` ← `.signpath/setup-exe.xml`
-5. **API token** — create a token for a user with **submitter** permission on
-   that project/policy; copy it (shown once).
-6. **Note your Organization ID** (a GUID in the organization settings).
+4. **Artifact configurations** — create two, pasting the contents of:
+   - slug `app-exe` from `.signpath/app-exe.xml`
+   - slug `setup-exe` from `.signpath/setup-exe.xml`
+5. **API token** — create a token for a user with *submitter* permission on that
+   project and policy, and copy it (it is shown once).
+6. **Organization ID** — copy the GUID from the organization settings.
 
-> If SignPath configures **pipeline policies** for your project (branch ruleset
-> constraints), you must satisfy them on GitHub — typically a branch ruleset on
-> `main` with *require a pull request* and/or *block force pushes*. Ask them, or
-> keep the default (no extra constraints).
+Note: if SignPath configures *pipeline policies* for the project (branch ruleset
+constraints), those have to be satisfied on GitHub as well — typically a branch
+ruleset on `main`.
 
 ---
 
-## Stage 3 — configure GitHub (you; 2 minutes)
+## 3. Configure GitHub
 
-Settings → **Secrets and variables → Actions**:
+Settings → Secrets and variables → Actions:
 
 | Kind | Name | Value |
 |------|------|-------|
-| Secret | `SIGNPATH_API_TOKEN` | the API token from Stage 2.5 |
-| Variable | `SIGNPATH_ORGANIZATION_ID` | your SignPath organization GUID |
+| Secret | `SIGNPATH_API_TOKEN` | the API token from step 2.5 |
+| Variable | `SIGNPATH_ORGANIZATION_ID` | the SignPath organization GUID |
 | Variable | `SIGNPATH_PROJECT_SLUG` | `autodesk-licensing-doctor` |
 | Variable | `SIGNPATH_SIGNING_POLICY_SLUG` | `release-signing` |
 
 ---
 
-## Stage 4 — cut the first signed release
+## 4. Cut the first signed release
 
-**Option A — from GitHub UI:** Actions → **Release (Signed)** → *Run workflow* →
-version `1.2.1`.
-
-**Option B — from the command line:**
+From the GitHub UI: Actions → **Release (Signed)** → *Run workflow* → version
+`1.2.1`. Or from a shell:
 
 ```powershell
 .\Publish-Release.ps1 -Version 1.2.1 -Notes "Signed release" -Recompile -ViaGitHubActions
 ```
 
-Both paths: CI compiles the exe, SignPath signs it, the zips + installer are
-built around the **signed** exe, the installer is signed, and the Release is
-published.
+Either way, CI compiles the application exe, has it signed, builds the archives
+and the installer around the **signed** exe, has the installer signed, and
+publishes the release.
 
-### ⚠️ Approve the signing request
+### Approve the signing requests
 
-**Every signing request must be approved manually** — that is a SignPath
-Foundation rule, not an option.
+Every signing request must be approved manually; this is a SignPath Foundation
+rule, not an option.
 
 1. Start the workflow (or push the tag).
-2. Within a few minutes SignPath shows a *pending signing request* — you get a
-   notification e-mail, and the request also appears in the SignPath UI
-   (*Signing Requests*).
-3. **Approve it.** The workflow is sitting there waiting; it is configured to
-   wait up to **1 hour** (`wait-for-completion-timeout-in-seconds: 3600`).
-4. Signing then completes and the release is published automatically.
+2. Within a few minutes the request appears in the SignPath UI under *Signing
+   Requests*, and a notification e-mail is sent.
+3. Approve it. The workflow waits for up to one hour
+   (`wait-for-completion-timeout-in-seconds: 3600`).
+4. Signing completes and the release is published.
 
-If you don't approve in time, the job fails after the timeout — just re-run it
-and approve faster. (There are **two** requests per release: the app exe first,
-then the installer. Approve both; the second one appears only after the first
-completes.)
+There are two requests per release — the application exe first, then the
+installer; the second appears only after the first has completed. If a request
+is not approved before the timeout the job fails; simply re-run it.
 
 ---
 
-## Stage 5 — verify
-
-Download the published installer and run:
+## 5. Verify
 
 ```powershell
 Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.1.exe |
     Format-List Status, @{n='Signer';e={$_.SignerCertificate.Subject}}
 ```
 
-Expected: `Status = Valid`, signer = **SignPath Foundation**.
+Expected: `Status = Valid` and signer **SignPath Foundation**. The UAC prompt of
+the installer must then read **SignPath Foundation** instead of *Unknown
+Publisher*.
 
-Then install it — the UAC prompt must show **SignPath Foundation**, not
-*Unknown Publisher*.
-
-> **SmartScreen is separate.** A correct signature removes *Unknown Publisher*
-> immediately, but the *"Windows protected your PC"* full-screen warning fades
-> away only as the certificate builds download reputation. Downloads accumulate
-> it; nothing else to configure.
+*SmartScreen is a separate mechanism:* a valid signature removes the *Unknown
+Publisher* prompt immediately, while the full-screen *"Windows protected your
+PC"* warning fades only as the certificate builds download reputation.
 
 ---
 
@@ -151,34 +134,34 @@ Then install it — the UAC prompt must show **SignPath Foundation**, not
 
 | Symptom | Cause / fix |
 |---------|-------------|
-| `Signing request failed: artifact configuration not found` | the slug in the workflow doesn't match the one in SignPath |
-| `Metadata restriction violated` | the exe's file/product version or company/product name doesn't match the artifact config — check the `parameters:` block sends `1.2.1.0` for `app-exe` and `1.2.1` for `setup-exe` |
+| `Signing request failed: artifact configuration not found` | the slug in the workflow does not match the one in SignPath |
+| `Metadata restriction violated` | the exe's file/product version or company/product name does not match the artifact configuration — check that the `parameters:` block sends `1.2.1.0` for `app-exe` and `1.2.1` for `setup-exe` |
 | `Artifact was not uploaded with actions/upload-artifact` | the upload step must run **before** the signing step, and its `artifact-id` output must be passed |
 | Workflow blocked by a policy | SignPath enabled pipeline policies — satisfy the GitHub branch ruleset they require |
-| Signature valid but SmartScreen still warns | expected at first; it decays with downloads |
-| Certificate expiry | the SignPath Foundation certificate is managed by SignPath; nothing to renew on your side |
+| Signature valid but SmartScreen still warns | expected at first; it fades with downloads |
+| Certificate expiry | the SignPath Foundation certificate is managed by SignPath; nothing to renew |
 
 ---
 
 ## Fallback — sign locally with your own certificate
 
-If SignPath declines the project (or while you wait), you can sign with a
-certificate you hold instead. No workflow changes are needed:
+If SignPath declines the project, a certificate you own can be used instead. No
+workflow changes are needed:
 
 ```powershell
 .\Build-Release.ps1 -Version 1.2.1 -Recompile     # build first
-.\Sign.ps1 -List                                  # find your certificate
+.\Sign.ps1 -List                                  # list usable certificates
 .\Sign.ps1 -Path .\releases\v1.2.1\*.exe -Thumbprint <sha1>
 .\Sign.ps1 -Verify -Path .\releases\v1.2.1\*.exe
 ```
 
-> ⚠️ Always sign the **app exe before** the installer is built, so the installer
-> embeds the signed exe — then sign the **installer** too.
+Always sign the **application exe before** building the installer, so the
+installer embeds the signed exe, and sign the **installer** afterwards.
 
-A good fit for a new open-source project is **Certum Open Source Code Signing**
-(≈ $29/year). Unlike SignPath Foundation it has **no reputation requirement**,
-but it does not provide a *free* certificate.
+A common choice for a young open-source project is **Certum Open Source Code
+Signing** (≈ $29/year). Unlike SignPath Foundation it has no reputation
+requirement, but the certificate is not free.
 
 ---
 
-© 2026 **UNLOCK DIGITAL** — *By Eng. Eslam Ashraf*
+© 2026 UNLOCK DIGITAL

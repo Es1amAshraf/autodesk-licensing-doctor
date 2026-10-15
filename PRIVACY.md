@@ -1,6 +1,6 @@
 # Privacy policy
 
-**UNLOCK DIGITAL — Autodesk Licensing Doctor** · © 2026 UNLOCK DIGITAL — *By Eng. Eslam Ashraf*
+**UNLOCK DIGITAL — Autodesk Licensing Doctor**
 
 > **This program will not transfer any information to other networked systems
 > unless specifically requested by the user or the person installing or
@@ -8,7 +8,7 @@
 
 ---
 
-## Short version
+## Summary
 
 There is **no telemetry, no analytics, no phone-home, no account, no license
 check** of any kind. The tool has no server. Nothing about you, your machine or
@@ -61,3 +61,7 @@ from anyone, including children.
 
 Questions or concerns → open an issue:
 <https://github.com/Es1amAshraf/autodesk-licensing-doctor/issues>
+
+---
+
+© 2026 UNLOCK DIGITAL

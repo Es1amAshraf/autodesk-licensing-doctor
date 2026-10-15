@@ -3,21 +3,45 @@
 [![CI](https://github.com/Es1amAshraf/autodesk-licensing-doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/Es1amAshraf/autodesk-licensing-doctor/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Es1amAshraf/autodesk-licensing-doctor?label=release)](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue)](#)
-[![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-5391FE)](https://microsoft.com/powershell)
+![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6)
+![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-5391FE)
 
-**UNLOCK DIGITAL** — *By Eng. Eslam Ashraf*
+**UNLOCK DIGITAL** — By Eng. Eslam Ashraf
 
 A portable Windows toolkit for Autodesk resellers and IT pros that **removes
-leftover cracked ("non-genuine") Autodesk artifacts** and **restores healthy
-official single-user subscription licensing** (`ADLS` + `AdSSO`), so genuine
-products activate and run normally again.
+leftovers of non-genuine Autodesk patches** and **restores healthy official
+single-user subscription licensing** (`ADLS` + `AdSSO`), so genuine products
+activate and run normally again.
 
 Windows 10 / 11 · GUI in **Arabic + English** · no installation required.
 
 ---
 
-## ⚖️ Legal & ethical notice
+## Download
+
+| What | Link |
+|------|------|
+| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.1.exe` (2.1 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.2.1/UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.1.exe) |
+| Portable `.zip` (no install) and full source | [releases page](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest) |
+| Always the newest release | <https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest> |
+
+The installer adds a desktop shortcut and an uninstaller, and is branded with the
+UNLOCK DIGITAL logo. See [Quick start](#quick-start) below.
+
+---
+
+## Screenshots
+
+The window in English and in Arabic (the language button in the header switches
+between them at runtime):
+
+![Main window in English](docs/screenshot-en.png)
+
+![Main window in Arabic](docs/screenshot-ar.png)
+
+---
+
+## Legal and ethical notice
 
 This project exists to **clean up** machines that were previously patched with
 cracked software and to **restore the official Autodesk licensing stack**.
@@ -40,7 +64,7 @@ applicable laws in your jurisdiction.
 |-------|---------|-----------------|
 | **1** | Deep read-only diagnostic (~19 checks) | no |
 | **2** | Layered backup + generated `UNDO.ps1` | writes backup only |
-| **3** | Safe cleanup of crack remains | **preview by default** — needs `-Apply` |
+| **3** | Safe cleanup of leftovers from non-genuine patches | **preview by default** — needs `-Apply` |
 | **4** | Repair / reinstall official licensing components (ADLS, AdSSO) | **preview by default** — needs `-Apply` |
 
 **Safety model:** backup always runs first, cleanup/repair do **nothing** until
@@ -99,8 +123,8 @@ System readiness · clock / time sync ("Clock Error") · installer health
 services · deep Authenticode scan of `AdskLicensing`/`AdSSO` · legacy
 **Network License Manager** · ODIS installer cache, antivirus and logs
 ("Unable to install") · **ADLS** connection health ("Connection Lost") ·
-product binaries · **crack leftovers** (`ProgramData\FLEXnet`,
-`ProductInformation.pit`, `crack`/`keygen`/`adskflex`/`lmgrd`) · registry
+product binaries · **leftovers of non-genuine patches** (`ProgramData\FLEXnet`,
+`ProductInformation.pit`, `crack`/`keygen`/`adskflex`/`lmgrd` file names) · registry
 hijacks · environment variables · scheduled tasks · startup entries · running
 processes · fake local license servers (FLEXlm ports) · connectivity to
 Autodesk endpoints + DNS hijack detection · WinHTTP proxy.
@@ -131,7 +155,7 @@ module and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (for the installer 
 
 ```powershell
 # compile the exe and cut a release (Project.zip + Portable.zip + Setup.exe + record)
-.\Build-Release.ps1 -Version 1.2.0 -Notes "..." -Recompile
+.\Build-Release.ps1 -Version 1.2.1 -Notes "..." -Recompile
 ```
 
 Each release is stored under `releases\v<version>\` in **three forms**:
@@ -181,7 +205,7 @@ certificate), sign the built binaries yourself:
 
 | Path | Purpose |
 |------|---------|
-| `AdskDoctor-GUI.ps1` | WPF bilingual (AR/EN) GUI |
+| `AdskDoctor-GUI.ps1` | WPF bilingual (AR/EN) GUI — `-Lang en` opens it in English |
 | `AdskDoctor.ps1` | Phase 1 — diagnostic engine |
 | `Backup.ps1` | Phase 2 — layered backup + `UNDO.ps1` generator |
 | `Clean.ps1` | Phase 3 — cleanup (preview by default) |
@@ -217,7 +241,7 @@ verification instructions are in **[CODE-SIGNING.md](CODE-SIGNING.md)**.
 Verify a downloaded file:
 
 ```powershell
-Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.0.exe |
+Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.1.exe |
     Format-List Status, SignerCertificate
 ```
 
@@ -231,4 +255,4 @@ Nothing is collected and nothing is uploaded — see **[PRIVACY.md](PRIVACY.md)*
 
 ## License
 
-[MIT](LICENSE) © 2026 **UNLOCK DIGITAL** — *By Eng. Eslam Ashraf*
+[MIT](LICENSE) © 2026 **UNLOCK DIGITAL**

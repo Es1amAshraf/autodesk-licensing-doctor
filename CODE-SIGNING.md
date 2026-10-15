@@ -14,12 +14,12 @@ SignPath.
 
 ## What is signed
 
-| Artifact | Signed? | Notes |
-|----------|---------|-------|
-| `UNLOCK-DIGITAL-AdskDoctor.exe` | ✅ yes | the application (inside `-Portable.zip`) |
-| `UNLOCK-DIGITAL-AdskDoctor-Setup-<v>.exe` | ✅ yes | the Inno Setup installer, built **after** the app exe was signed, so the executable it ships is signed too |
-| `AdskDoctor-v<v>-Project.zip` | ❌ no | plain source text, nothing to sign |
-| `.ps1` / `.cmd` scripts inside the zips | ❌ no | not released as executables; they run under the signed app |
+| Artifact | Signed | Notes |
+|----------|--------|-------|
+| `UNLOCK-DIGITAL-AdskDoctor.exe` | yes | the application (inside `-Portable.zip`) |
+| `UNLOCK-DIGITAL-AdskDoctor-Setup-<v>.exe` | yes | the Inno Setup installer, built **after** the app exe was signed, so the executable it ships is signed too |
+| `AdskDoctor-v<v>-Project.zip` | no | plain source text, nothing to sign |
+| `.ps1` / `.cmd` scripts inside the zips | no | not released as executables; they run under the signed app |
 
 The **sha256 of every file is published** next to each release
 (`SHA256SUMS.txt`, `RELEASES.md`, and the release notes), so a user can verify
@@ -72,14 +72,14 @@ This project collects nothing. See [PRIVACY.md](PRIVACY.md):
 PowerShell (no extra tools needed):
 
 ```powershell
-Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.0.exe |
+Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.1.exe |
     Format-List Status, StatusMessage, @{n='Signer';e={$_.SignerCertificate.Subject}}, TimeStamperCertificate
 ```
 
 Windows SDK `signtool`:
 
 ```cmd
-signtool verify /pa /v UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.0.exe
+signtool verify /pa /v UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.1.exe
 ```
 
 Or right-click the file → **Properties** → **Digital Signatures** tab.
@@ -103,4 +103,4 @@ open an issue:
 
 ---
 
-© 2026 **UNLOCK DIGITAL** — *By Eng. Eslam Ashraf*
+© 2026 UNLOCK DIGITAL

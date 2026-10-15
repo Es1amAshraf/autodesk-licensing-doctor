@@ -7,7 +7,15 @@
     Loads a company logo (unlock-logo.png) from this folder if present.
 
     Run:  powershell -STA -ExecutionPolicy Bypass -File .\AdskDoctor-GUI.ps1
+          powershell -STA -ExecutionPolicy Bypass -File .\AdskDoctor-GUI.ps1 -Lang en
 #>
+
+param(
+    # Language the window opens in: 'ar' (default) or 'en'. The toggle button
+    # still switches between the two at runtime.
+    [ValidateSet('ar', 'en')]
+    [string]$Lang = 'ar'
+)
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Xaml
 
@@ -16,7 +24,9 @@ if ([System.Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') {
     if ($PSCommandPath -and (Test-Path -LiteralPath $PSCommandPath)) {
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         $psi.FileName = (Get-Command powershell).Source
-        $psi.Arguments = '-NoProfile -STA -ExecutionPolicy Bypass -File "{0}"' -f $PSCommandPath
+        $extra = ''
+        if ($Lang -and $Lang -ne 'ar') { $extra = ' -Lang ' + $Lang }
+        $psi.Arguments = ('-NoProfile -STA -ExecutionPolicy Bypass -File "{0}"{1}' -f $PSCommandPath, $extra)
         [System.Diagnostics.Process]::Start($psi) | Out-Null
         exit
     }
@@ -120,7 +130,7 @@ $L = @{
       'Pick an action from the panel. Suggested order:',
       '   1) Scan this PC   (produces a health report)',
       '   2) Create backup  (safety before any change)',
-      '   3) Clean this PC  (removes crack leftovers)',
+      '   3) Clean this PC  (removes non-genuine leftovers)',
       '   4) Repair         (reinstalls official licensing)'
     )
     doneMsg       = 'All done.'
@@ -145,7 +155,7 @@ $L = @{
   }
 }
 
-$script:lang = 'ar'
+$script:lang = $Lang
 function T { param([string]$k) $L[$script:lang][$k] }
 
 # ---------------------------------------------------------------------------
@@ -305,6 +315,10 @@ function Write-Welcome {
 $script:busy = $false
 $script:proc = $null
 $script:openAfter = $null
+$script:outTask = $null
+$script:errTask = $null
+$script:timer = $null
+$script:taskDone = $false
 
 function Add-Log {
     param([string]$Text)
@@ -329,9 +343,54 @@ function End-Task {
     if ($script:openAfter -and (Test-Path -LiteralPath $script:openAfter)) { Start-Process $script:openAfter }
     $script:openAfter = $null
 }
+# ---------------------------------------------------------------------------
+# Child-process output
+# ---------------------------------------------------------------------------
+# The process events (add_OutputDataReceived / add_ErrorDataReceived /
+# add_Exited) are deliberately NOT used. .NET raises them on worker threads that
+# have no PowerShell runspace, so a scriptblock handler throws
+# "PSInvalidOperationException ... ScriptBlock.GetContextFromTLS()" there and
+# kills the whole application. A plain "powershell -File" run survives it, but
+# the ps2exe-compiled build - the one that ships inside the installer - crashes
+# the moment a task produces output.
+#
+# The async line readers are polled from a DispatcherTimer instead; it ticks on
+# the UI thread, which does have a runspace.
+function Receive-Output {
+    while ($script:outTask -and $script:outTask.IsCompleted) {
+        $line = $script:outTask.Result
+        if ($null -eq $line) { $script:outTask = $null; break }
+        Add-Log $line
+        $script:outTask = $script:proc.StandardOutput.ReadLineAsync()
+    }
+    while ($script:errTask -and $script:errTask.IsCompleted) {
+        $line = $script:errTask.Result
+        if ($null -eq $line) { $script:errTask = $null; break }
+        Add-Log ('! ' + $line)
+        $script:errTask = $script:proc.StandardError.ReadLineAsync()
+    }
+}
+function Stop-TaskTimer {
+    if ($script:timer) { $script:timer.Stop(); $script:timer = $null }
+}
+function Complete-Task {
+    $script:taskDone = $true
+    $guard = 0
+    while (($script:outTask -or $script:errTask) -and $guard -lt 20) {
+        Receive-Output
+        if ($script:outTask -or $script:errTask) { Start-Sleep -Milliseconds 100; $guard++ }
+    }
+    Receive-Output
+    Stop-TaskTimer
+    $code = 0
+    try { $code = $script:proc.ExitCode } catch { }
+    End-Task $code
+}
+
 function Run-Task {
     param([string]$Title, [string[]]$Arguments, [string]$OpenAfter)
     if ($script:busy) { [System.Windows.MessageBox]::Show((T 'busyMsg'),'UNLOCK DIGITAL') | Out-Null; return }
+    Stop-TaskTimer
     Set-Busy $true
     $TxtLog.Clear()
     $StatusText.Text = ((T 'statusRunning') + $Title)
@@ -352,17 +411,20 @@ function Run-Task {
 
     $p = New-Object System.Diagnostics.Process
     $p.StartInfo = $psi
-    $p.EnableRaisingEvents = $true
-    $script:onOut = { param($s,$e) if ($null -ne $e.Data) { $l = $e.Data; $win.Dispatcher.Invoke([Action[string]]{ param($x) Add-Log $x }, $l) } }
-    $script:onErr = { param($s,$e) if ($null -ne $e.Data) { $l = $e.Data; $win.Dispatcher.Invoke([Action[string]]{ param($x) Add-Log ("! " + $x) }, $l) } }
-    $script:onExit= { param($s,$e) $c = $s.ExitCode; $win.Dispatcher.Invoke([Action]{ End-Task $c }) }
-    $p.add_OutputDataReceived($script:onOut)
-    $p.add_ErrorDataReceived($script:onErr)
-    $p.add_Exited($script:onExit)
-    $script:proc = $p
     try { $p.Start() | Out-Null } catch { Add-Log (': ' + $_.Exception.Message); Set-Busy $false; return }
-    $p.BeginOutputReadLine()
-    $p.BeginErrorReadLine()
+
+    $script:proc     = $p
+    $script:outTask  = $p.StandardOutput.ReadLineAsync()
+    $script:errTask  = $p.StandardError.ReadLineAsync()
+    $script:taskDone = $false
+
+    $script:timer = New-Object System.Windows.Threading.DispatcherTimer
+    $script:timer.Interval = [TimeSpan]::FromMilliseconds(150)
+    $script:timer.Add_Tick({
+        Receive-Output
+        if (-not $script:taskDone -and $script:proc -and $script:proc.HasExited) { Complete-Task }
+    })
+    $script:timer.Start()
 }
 
 # ---------------------------------------------------------------------------

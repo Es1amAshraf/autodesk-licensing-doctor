@@ -21,8 +21,8 @@ reasonable window to fix and release before publishing details.
 
 ## What counts as a vulnerability here
 
-This tool runs **elevated** on machines that were previously compromised by
-cracked software, so we care about:
+This tool runs **elevated** on machines that were previously modified with
+non-genuine software, so we care about:
 
 - anything that lets a **non-administrator** influence what the elevated tool executes
 - path/registry handling that could be abused for **privilege escalation** or arbitrary file write/delete
@@ -43,8 +43,8 @@ cracked software, so we care about:
 
 | Version | Supported |
 |---------|-----------|
-| latest release | ✅ |
-| anything older | ❌ |
+| latest release | yes |
+| anything older | no |
 
 ## Supply chain / provenance
 
@@ -54,5 +54,5 @@ cracked software, so we care about:
 - Every release ships `SHA256SUMS.txt`; verify before running:
 
 ```powershell
-Get-FileHash .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.0.exe -Algorithm SHA256
+Get-FileHash .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.1.exe -Algorithm SHA256
 ```
