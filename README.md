@@ -21,16 +21,16 @@ Windows 10 / 11 · GUI in **Arabic + English** · no installation required.
 
 | What | Link |
 |------|------|
-| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.4.exe` (2.1 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.2.4/UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.4.exe) |
+| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.5.exe` (2.1 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.2.5/UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.5.exe) |
 | Portable `.zip` (no install) and full source | [releases page](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest) |
 | Always the newest release | <https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest> |
 
 SHA256 of the files above (also in `SHA256SUMS.txt` on the release page):
 
 ```text
-03610B0E51E075775B934CAE8DC662BFFEE01F32576322249647DDCA257F263D  UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.4.exe
-E9FCB9BCE1B03042A294AEBED5F26F5E0ACF2A3BB188E503AA5CCCB86BC7E142  AdskDoctor-v1.2.4-Portable.zip
-CB84238FE20AF05935BEF0F739F47DC55E2363CB25D51BF8AE8AD1634AF6C45D  AdskDoctor-v1.2.4-Project.zip
+4D897959749BE2E23B1E6A1D72D632620203A030FBB928D0F1322FB13C612935  UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.5.exe
+7FE7653D4B97B4594D5C6223EEE7F884C06BC50F880D97F3DDCE5C39163C73CC  AdskDoctor-v1.2.5-Portable.zip
+295265925696916C3C71DA0E1F9FD7DA7C726EB32EAAA5367EE15F636965C777  AdskDoctor-v1.2.5-Project.zip
 ```
 
 See [Verify your download](#verify-your-download).
@@ -89,7 +89,7 @@ backup's `UNDO.ps1`.
 |------------------------|-------------------------------|
 | **"Licensing error — An error occurred"** (AutoCAD/Revit 2020+) | Verifies the whole sign-in licensing stack (ADLS build, service state, licensing agent, identity/SSO component), flags a stale or half-updated licensing service, resets leftover licence caches and reinstalls the official components in the Repair phase. |
 | **"Connection Lost to Autodesk Desktop Licensing Service"** | ADLS presence, state, start-up mode and the signature of its service binary; an old or replaced build is reported and the Repair phase installs the official one. |
-| **Sign-in window never opens / sign-in fails** | AdSSO + identity component, `hosts` hijacks, firewall blocks, WinHTTP proxy, DNS and connectivity to `accounts.autodesk.com`. |
+| **Sign-in window never opens / sign-in fails** | AdSSO + identity component, **the Edge WebView2 runtime that renders the sign-in window**, `hosts` hijacks, firewall blocks, WinHTTP proxy, DNS and connectivity to `accounts.autodesk.com`. The product fails with a licensing error *before* the sign-in page when WebView2 is missing. |
 | **Ask for a serial number / activation screen** | Legacy ADLM licence cache (`ProductInformation.pit`, `ProgramData\FLEXnet`) left by a non-genuine activation — the Cleanup phase resets it so the product asks for a normal sign-in again. |
 | **"The license manager is not functioning"** | Leftover **Network License Manager** (service pointing at deleted binaries) — reported as a stale leftover and removed by Cleanup (`-KeepNLM` keeps it). |
 | **Product does not start at all, no error** | **IFEO execution blockers** — a `Debugger` value squeezing an Autodesk executable. Cleanup removes them; the Repair phase cannot succeed while one is in place. |
@@ -152,7 +152,9 @@ services (including services that point at deleted binaries) · **IFEO execution
 blockers** that stop Autodesk executables from starting · deep Authenticode scan
 of the `AdskLicensing` / `AdSSO` **binaries** (patched binaries are detected by
 their broken signature) · **ADLS** build, `Current` link, licensing agent and
-**AdSSO** presence ("Connection Lost", "Licensing error") · legacy **Network
+**AdSSO** presence ("Connection Lost", "Licensing error") · **Microsoft Edge
+WebView2 runtime** (the sign-in window is rendered with it — a product with no
+WebView2 fails *before* the sign-in page) · legacy **Network
 License Manager** · ODIS installer cache, antivirus and logs ("Unable to
 install") · product binaries · **leftovers of non-genuine patches**
 (`ProgramData\FLEXnet`, the legacy ADLM cache with `ProductInformation.pit`,
@@ -188,7 +190,7 @@ module and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (for the installer 
 
 ```powershell
 # compile the exe and cut a release (Project.zip + Portable.zip + Setup.exe + record)
-.\Build-Release.ps1 -Version 1.2.4 -Notes "..." -Recompile
+.\Build-Release.ps1 -Version 1.2.5 -Notes "..." -Recompile
 ```
 
 Each release is stored under `releases\v<version>\` in **three forms**:
@@ -228,8 +230,8 @@ certificate), sign the built binaries yourself:
 
 ```powershell
 .\Sign.ps1 -List                                    # show usable certificates
-.\Sign.ps1 -Path .\releases\v1.2.4\*.exe -Thumbprint <sha1>
-.\Sign.ps1 -Verify -Path .\releases\v1.2.4\*.exe     # check a release
+.\Sign.ps1 -Path .\releases\v1.2.5\*.exe -Thumbprint <sha1>
+.\Sign.ps1 -Verify -Path .\releases\v1.2.5\*.exe     # check a release
 ```
 
 ---
@@ -274,7 +276,7 @@ verification instructions are in **[CODE-SIGNING.md](CODE-SIGNING.md)**.
 Verify a downloaded file:
 
 ```powershell
-Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.4.exe |
+Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.5.exe |
     Format-List Status, SignerCertificate
 ```
 
@@ -301,8 +303,12 @@ test suite now guards against it.
 
 **A product now says "Licensing error — An error occurred" and the tool did not
 fix it. What next?**
-A cleanup cannot repair binaries that a patch replaced, and a
-product will not license itself. Repair or reinstall that product from the
+Check *where* it fails. If the **sign-in page never appears**, the window that
+should show it cannot render: install (or repair) the **Microsoft Edge WebView2
+runtime**, reboot and try again — the diagnostic reports it either way. If the
+sign-in page appears and then fails, the machine has no usable entitlement: a
+cleanup cannot repair binaries that a patch replaced, and a
+product will not license itself, so repair or reinstall that product from the
 official installer, reboot, then sign in. If it still fails, the licensing
 service log (see below) says why.
 

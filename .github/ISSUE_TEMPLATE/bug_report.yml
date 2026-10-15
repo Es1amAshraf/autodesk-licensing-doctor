@@ -15,7 +15,7 @@ body:
     attributes:
       label: Toolkit version
       description: Shown in the GUI footer, or the file name of the release you downloaded
-      placeholder: "1.2.4"
+      placeholder: "1.2.5"
     validations:
       required: true
 

@@ -1,13 +1,13 @@
 ;  AdskDoctor.iss  -  UNLOCK DIGITAL  -  Autodesk Licensing Doctor
 ;  -----------------------------------------------------------------
 ;  Build:
-;    ISCC.exe /DVersion=1.2.4 /DPayloadDir=<dir> /DOutputDir=<dir> AdskDoctor.iss
+;    ISCC.exe /DVersion=1.2.5 /DPayloadDir=<dir> /DOutputDir=<dir> AdskDoctor.iss
 ;
 ;  Defaults (when built by Build-Release.ps1, the defines are passed in):
 ;    PayloadDir = the folder placed next to the .exe  (scripts + icon + logo)
 
 #ifndef Version
-  #define Version "1.2.4"
+  #define Version "1.2.5"
 #endif
 #ifndef PayloadDir
   #define PayloadDir ".."

@@ -538,6 +538,35 @@ if (Test-Path -LiteralPath $adSSO) {
     Add-Finding INFO 'Licensing' 'AdSSO is not installed' 'No Autodesk product is installed on this machine'
 }
 
+# --- sign-in window (Microsoft Edge WebView2) -------------------------------
+# Autodesk renders the "Sign in with your Autodesk ID" window with the Edge
+# WebView2 runtime (the licensing agent ships an EBWebView user-data folder).
+# When that runtime is missing or broken the product never reaches the sign-in
+# page: it fails first with the generic "Licensing error - An error occurred",
+# which is exactly what a customer reported.
+$wv2Key = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+$wv2 = @()
+foreach ($root in @(
+    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients',
+    'HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients',
+    'HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients')) {
+    if (Test-Path -LiteralPath $root) {
+        $wv2 += @(Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue |
+                  Where-Object { $_.PSChildName -eq $wv2Key })
+    }
+}
+if ($wv2.Count) {
+    $pv = (Get-ItemProperty -LiteralPath $wv2[0].PSPath -ErrorAction SilentlyContinue).pv
+    Add-Finding OK 'Licensing' ('Microsoft Edge WebView2 runtime present ({0})' -f $pv) ($wv2[0].PSPath -replace 'Microsoft\.PowerShell\.Core\\Registry::', '')
+} else {
+    $wv2Exe = @(Get-ChildItem -LiteralPath (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\EdgeWebView\Application') -Recurse -File -Filter 'msedgewebview2.exe' -ErrorAction SilentlyContinue | Select-Object -First 1)
+    if ($wv2Exe.Count) {
+        Add-Finding OK 'Licensing' 'Microsoft Edge WebView2 runtime present' $wv2Exe[0].FullName
+    } else {
+        Add-Finding WARN 'Licensing' 'Microsoft Edge WebView2 runtime not found - the Autodesk sign-in window needs it' 'A product then fails with "Licensing error - An error occurred" before the sign-in page: install the official WebView2 runtime'
+    }
+}
+
 # ===========================================================================
 # 4b. Network License Manager (NLM)
 #     An OLD NLM blocks installation of Revit/AutoCAD 2026+

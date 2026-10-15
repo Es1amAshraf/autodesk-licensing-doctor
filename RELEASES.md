@@ -1,5 +1,36 @@
 ﻿# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases
 
+## v1.2.5  (2026-10-15 21:27:13)
+
+Report accuracy follow-up (v1.2.4 stopped the false signature failures; this
+build removes the last false failure and one leftover the cleanup missed).
+
+Fixed:
+- The toolkit no longer reports *itself* as a suspicious running process. Its
+  name contains "adsk" and the portable build runs from a user profile, so its
+  own process showed up as a red FAIL row in its own report.
+- The running-process check now decides by the signature of the binary instead
+  of the folder it lives in: Autodesk ships genuine per-user products (Access,
+  Fusion) under %LOCALAPPDATA%, and their processes are no longer suspicious.
+  A patched (broken signature) or unsigned Autodesk-named process still fails.
+- Cleanup now removes the Autodesk Network License Manager service (AdskNLM).
+  It matched only "flexnet|flexlm" and the display name "Network License
+  Manager" before, so on a customer machine the service survived pointing at
+  deleted binaries.
+
+Improved:
+- UNDO.ps1 recreates services that the cleanup removed. A deleted service cannot
+  be restored from a file copy, so the rollback promise did not hold for them.
+
+Includes everything from v1.2.4: only real binaries are signature-scanned (data
+files are no longer reported as patched), no false license-server / AdSSO /
+AdskLicensingAgent warnings, new ADLS + IFEO + stale-service checks, the legacy
+ADLM licence cache is reset, and the verdict names the step to run.
+
+- `AdskDoctor-v1.2.5-Project.zip`  -  0.13 MB  -  SHA256 `295265925696916C3C71DA0E1F9FD7DA7C726EB32EAAA5367EE15F636965C777`
+- `AdskDoctor-v1.2.5-Portable.zip`  -  0.14 MB  -  SHA256 `7FE7653D4B97B4594D5C6223EEE7F884C06BC50F880D97F3DDCE5C39163C73CC`
+- `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.5.exe`  -  2.1 MB  -  SHA256 `4D897959749BE2E23B1E6A1D72D632620203A030FBB928D0F1322FB13C612935`
+
 ## v1.2.4  (2026-10-15 21:04:19)
 
 Diagnostic accuracy release.

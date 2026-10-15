@@ -242,4 +242,12 @@ Describe 'Regression guards' {
         $diag = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
         $diag | Should -Match "ProcessName -notmatch 'adskdoctor\|unlock-digital'"
     }
+
+    It 'checks the WebView2 runtime that renders the sign-in window' {
+        # A product that fails with a licensing error *before* it shows the
+        # "Sign in with your Autodesk ID" page usually has no WebView2 runtime.
+        $diag = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
+        $diag | Should -Match 'WebView2'
+        $diag | Should -Match '\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5\}'
+    }
 }
