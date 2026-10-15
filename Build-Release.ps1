@@ -167,6 +167,22 @@ New-Item -ItemType Directory -Force -Path $sProj,$sPort,$sSetup,$sPayload | Out-
 
 Write-Step "Staging files ..."
 
+# The README ships inside the archives, so it must not carry the hash block: the
+# numbers in there would be one release old for anyone who opens the zip and
+# checks them. Stage a copy whose block points at the release page instead.
+$readmeShipped = $null
+$readmeSrc = Join-Path $root 'README.md'
+if (Test-Path -LiteralPath $readmeSrc) {
+    $rm = [System.IO.File]::ReadAllText($readmeSrc)
+    $rm = [regex]::Replace($rm,
+        '(?ms)^```text\r?\n[0-9A-Fa-f ]{64}.*?^```\r?\n',
+        ("``SHA256SUMS.txt`` on the release page carries the SHA256 of every artifact. " +
+         "The README inside an archive cannot list that archive's own hash, so the " +
+         "numbers are not repeated here.`r`n"))
+    $readmeShipped = Join-Path $env:TEMP ('adsk_readme_' + [guid]::NewGuid().ToString('N') + '.md')
+    Save-Text $readmeShipped $rm
+}
+
 # --- 2a) PROJECT -----------------------------------------------------------
 foreach ($f in $sourceScripts + $launchers) {
     $src = Join-Path $root $f
@@ -175,10 +191,11 @@ foreach ($f in $sourceScripts + $launchers) {
 Copy-Item $icon $sProj -Force
 if ($hasIco) { Copy-Item $logoIco $sProj -Force }
 if (Test-Path $logoPng) { Copy-Item $logoPng $sProj -Force }
-foreach ($f in @('README.md','LICENSE','RELEASES.md','.gitignore','.gitattributes')) {
+foreach ($f in @('LICENSE','RELEASES.md','.gitignore','.gitattributes')) {
     $src = Join-Path $root $f
     if (Test-Path $src) { Copy-Item $src $sProj -Force }
 }
+if ($readmeShipped) { Copy-Item $readmeShipped (Join-Path $sProj 'README.md') -Force }
 $instDirSrc = Join-Path $root 'installer'
 if (Test-Path $instDirSrc) {
     $d = Join-Path $sProj 'installer'
@@ -194,7 +211,7 @@ $runtimePayload += ($launchers | ForEach-Object { Join-Path $root $_ } | Where-O
 
 # --- 2b) PORTABLE ----------------------------------------------------------
 Copy-Item $runtimePayload $sPort -Force
-if (Test-Path (Join-Path $root 'README.md')) { Copy-Item (Join-Path $root 'README.md') $sPort -Force }
+if ($readmeShipped) { Copy-Item $readmeShipped (Join-Path $sPort 'README.md') -Force }
 if (Test-Path $licenseF) { Copy-Item $licenseF $sPort -Force }
 $portableReadme = @"
 UNLOCK DIGITAL - Autodesk Licensing Doctor  (PORTABLE v$Version)
@@ -211,7 +228,7 @@ Save-Text (Join-Path $sPort 'PORTABLE-READ-ME.txt') $portableReadme
 
 # --- 2c) INSTALLER ---------------------------------------------------------
 Copy-Item $runtimePayload $sPayload -Force
-if (Test-Path (Join-Path $root 'README.md')) { Copy-Item (Join-Path $root 'README.md') $sPayload -Force }
+if ($readmeShipped) { Copy-Item $readmeShipped (Join-Path $sPayload 'README.md') -Force }
 
 $setupExe = Join-Path $releaseDir ("UNLOCK-DIGITAL-AdskDoctor-Setup-$Version.exe")
 $usedInno = $false

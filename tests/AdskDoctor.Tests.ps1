@@ -332,4 +332,17 @@ Describe 'Regression guards' {
         $enKeys = @([regex]::Matches($en, $key) | ForEach-Object { $_.Groups[1].Value })
         @(Compare-Object $arKeys $enKeys) | Should -BeNullOrEmpty -Because 'both languages need the same keys'
     }
+
+    It 'does not ship a README that carries the hashes of its own archives' {
+        # The README travels inside the project / portable / installer payloads,
+        # so a hash block in it is one release old for whoever opens the zip and
+        # checks. The staged copy points at SHA256SUMS.txt instead, and all three
+        # archives must take that copy rather than the file in the repository.
+        $build = Get-Content -LiteralPath (Join-Path $script:Root 'Build-Release.ps1') -Raw
+        $build | Should -Match '\$readmeShipped'
+        @([regex]::Matches($build, [regex]::Escape('Copy-Item $readmeShipped'))).Count |
+            Should -Be 3 -Because 'project, portable and installer payload all need it'
+        @([regex]::Matches($build, [regex]::Escape("Copy-Item (Join-Path `$root 'README.md')"))).Count |
+            Should -Be 0 -Because 'the root README keeps the hash block for the repo only'
+    }
 }
