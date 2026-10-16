@@ -1,5 +1,19 @@
 ﻿# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases
 
+## v1.3.3  (2026-10-17 02:03:39)
+
+### Changed
+- `AdskDoctor-v1.3.3-Project.zip` now ships the compiled app exe (`UNLOCK-DIGITAL-AdskDoctor.exe`) next to the sources, so the Project download can be started with a double-click exactly like the Portable one. All files stay where they were - only the missing exe was added.
+
+### Notes
+- The Portable zip already contained the exe; the Setup installer was never affected. Nothing else changed: same tool, same behavior as v1.3.2.
+- v1.3.2 fixed the Setup "Launch" checkbox (`CreateProcess failed; code 740`).
+
+
+- `AdskDoctor-v1.3.3-Project.zip`  -  0.19 MB  -  SHA256 `D5309A4FA574CDE0F84FB68D35F1655A60F314357D5667D718AA5686967C2D5E`
+- `AdskDoctor-v1.3.3-Portable.zip`  -  0.16 MB  -  SHA256 `4407B751968B1710223305F0A30C9ECB0934952300826E4A8921A76C4E03300C`
+- `UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.3.exe`  -  2.12 MB  -  SHA256 `7E4E89278BBC0BB400020C678DEEF78627985FC06792E7E91CC78C38DD578B80`
+
 ## v1.3.2  (2026-10-17 01:59:33)
 
 ### Fixed
