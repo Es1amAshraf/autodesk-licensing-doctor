@@ -22,16 +22,16 @@ Windows 10 / 11 · GUI in **Arabic + English** · no installation required.
 
 | What | Link |
 |------|------|
-| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.1.exe` (2.12 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.3.1/UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.1.exe) |
+| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.3.exe` (2.12 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.3.3/UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.3.exe) |
 | Portable `.zip` (no install) and full source | [releases page](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest) |
 | Always the newest release | <https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest> |
 
 SHA256 of the files above (also in `SHA256SUMS.txt` on the release page):
 
 ```text
-AF364B478A2A25198B3B5015F586FD599C9A8F017939FEF1ACE459276D26077E  UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.1.exe
-DBB90CA30B9929D99C533EE9F3D04275520C30DDA378271D86D7A8CE8C30002A  AdskDoctor-v1.3.1-Portable.zip
-6F22371D13DCD1F47B0583312160597DC9E56F01619AB7EA6E4669CCA4132A33  AdskDoctor-v1.3.1-Project.zip
+7E4E89278BBC0BB400020C678DEEF78627985FC06792E7E91CC78C38DD578B80  UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.3.exe
+4407B751968B1710223305F0A30C9ECB0934952300826E4A8921A76C4E03300C  AdskDoctor-v1.3.3-Portable.zip
+D5309A4FA574CDE0F84FB68D35F1655A60F314357D5667D718AA5686967C2D5E  AdskDoctor-v1.3.3-Project.zip
 ```
 
 See [Verify your download](#verify-your-download).
@@ -295,8 +295,8 @@ certificate), sign the built binaries yourself:
 
 ```powershell
 .\Sign.ps1 -List                                    # show usable certificates
-.\Sign.ps1 -Path .\releases\v1.3.1\*.exe -Thumbprint <sha1>
-.\Sign.ps1 -Verify -Path .\releases\v1.3.1\*.exe     # check a release
+.\Sign.ps1 -Path .\releases\v1.3.3\*.exe -Thumbprint <sha1>
+.\Sign.ps1 -Verify -Path .\releases\v1.3.3\*.exe     # check a release
 ```
 
 ---
