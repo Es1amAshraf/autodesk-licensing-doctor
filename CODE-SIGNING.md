@@ -4,11 +4,26 @@
 
 > **Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).**
 
-Every official binary we publish in a GitHub Release is signed with an
-Authenticode certificate provided by the *SignPath Foundation*. Signatures are
-created from a build of this repository on GitHub-hosted runners — never from a
-developer machine — and the signed files are published exactly as produced by
-SignPath.
+## Status (October 2026)
+
+**Releases are not signed yet.** The SignPath Foundation reviewed this
+project's application in October 2026 and deferred it: the Foundation program
+requires visible community adoption (stars, forks, external references,
+sustained activity) that a project this young cannot show yet. The maintainers
+were explicitly invited to re-apply once the project has gained broader
+recognition.
+
+Until then: **verify every download by SHA256** against `SHA256SUMS.txt` /
+`RELEASES.md` on the release page, and expect the Windows *"Unknown Publisher"*
+prompt (see the README FAQ). The signing pipeline described below is already in
+place and will be switched on unchanged once a certificate is available.
+
+The rest of this document describes the policy that applies **from the first
+signed release on**: every official binary we publish in a GitHub Release is
+signed with an Authenticode certificate provided by the *SignPath Foundation*.
+Signatures are created from a build of this repository on GitHub-hosted
+runners — never from a developer machine — and the signed files are published
+exactly as produced by SignPath.
 
 ---
 
@@ -89,8 +104,10 @@ Or right-click the file → **Properties** → **Digital Signatures** tab.
 - the signature must be **timestamped**, so it stays valid after the certificate
   expires
 
-If `Status` is `NotSigned` or `UnknownError`, the file was **not** produced by
-our pipeline — do not run it.
+Until the first signed release (see *Status* above) every file reports
+`NotSigned` — that is expected; verify the SHA256 instead. From the first signed
+release on, a `NotSigned` or `UnknownError` status means the file was **not**
+produced by our pipeline — do not run it.
 
 ---
 

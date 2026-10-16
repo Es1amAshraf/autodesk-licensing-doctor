@@ -5,6 +5,15 @@ Publisher"* prompt to properly signed releases. Everything that lives in the
 repository is already in place; the remaining steps happen in the SignPath and
 GitHub user interfaces.
 
+> **Status (October 2026).** The first application to the SignPath Foundation
+> was reviewed and **deferred**: the program requires visible community
+> adoption (stars, forks, external references, sustained activity) that a new
+> project cannot show yet, and the maintainers were invited to re-apply once
+> the project has gained broader recognition. Everything below stays valid and
+> unchanged for that re-application — nothing has to be rebuilt. See the
+> *Fallback* section at the end for certificates that can sign releases in the
+> meantime without the reputation requirement.
+
 Repository files involved:
 
 | File | Purpose |
@@ -30,7 +39,10 @@ Repository files involved:
 
 ## 1. Apply
 
-Apply at <https://signpath.org/apply>. Reviews are manual; expect a few days.
+Apply at <https://signpath.org/apply>. Reviews are manual; expect a few days
+(1–2 weeks in practice). The review weighs **public visibility**, not code
+quality — a first application from a freshly published repository can expect a
+deferral, which is explicitly an invitation to re-apply later.
 
 ```
 Repository : https://github.com/Es1amAshraf/autodesk-licensing-doctor
@@ -149,8 +161,8 @@ PC"* warning fades only as the certificate builds download reputation.
 
 ## Fallback — sign locally with your own certificate
 
-If SignPath declines the project, a certificate you own can be used instead. No
-workflow changes are needed:
+If SignPath declines the project (as happened in October 2026), a certificate
+you own can be used instead. No workflow changes are needed:
 
 ```powershell
 .\Build-Release.ps1 -Version 1.2.9 -Recompile     # build first
@@ -162,9 +174,19 @@ workflow changes are needed:
 Always sign the **application exe before** building the installer, so the
 installer embeds the signed exe, and sign the **installer** afterwards.
 
-A common choice for a young open-source project is **Certum Open Source Code
-Signing** (≈ $29/year). Unlike SignPath Foundation it has no reputation
-requirement, but the certificate is not free.
+Signing options reviewed in October 2026 for a young open-source project:
+
+| Option | Cost | Notes |
+|--------|------|-------|
+| Certum — **Open Source Code Signing in the Cloud** | from ~€49 / $58 per year | individual certificate (*"Open Source Developer"* + your name), no hardware token, 5000 signatures/month; requires identity verification, a utility bill and a public open-source project; must not be used for commercially distributed software |
+| SignPath — paid subscription | from $500/year | certificates are EV and can only be issued to a **legally registered organization** (GlobalSign policy) |
+| Azure Artifact Signing (formerly Trusted Signing) | ~$9.99/month | individuals only in the USA and Canada; organizations in the USA, Canada, EU, UK |
+
+(The *"code"-only* Certum product at ~$29 applies only if a `cryptoCertum`
+card and reader are already owned; the cloud product above needs neither.)
+
+Unlike SignPath Foundation, the Certum certificate has no reputation
+requirement — but it is not free, and identity verification is per person.
 
 ---
 

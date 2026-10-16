@@ -246,6 +246,13 @@ appended to `RELEASES.md`. Pass `-LegacySetupZip` to emit the old
 
 ### Signed releases (CI)
 
+> **Status (October 2026):** the project's application to the SignPath
+> Foundation was reviewed and deferred until the project shows broader public
+> adoption (stars, forks, external references — see
+> [SIGNPATH-SETUP.md](SIGNPATH-SETUP.md)). **Current releases are therefore
+> unsigned**; verify the SHA256 of every download. The workflow below is kept
+> ready and switches on unchanged once a certificate is available.
+
 `.github/workflows/release-sign.yml` runs on `windows-latest`, builds the app
 exe, signs it, then builds the zips + installer around the **signed** exe,
 signs the installer too, and publishes the Release. Signing uses
@@ -260,8 +267,11 @@ Repository configuration needed:
 | variable | `SIGNPATH_SIGNING_POLICY_SLUG` | e.g. `release-signing` |
 
 …plus the two artifact configurations (`app-exe`, `setup-exe`) created in
-SignPath from the files in `.signpath/`. Apply for the free OSS certificate at
-<https://signpath.org/apply>.
+SignPath from the files in `.signpath/`. Apply (or re-apply) for the free OSS
+certificate at <https://signpath.org/apply> once the project has visible
+adoption — the review weighs public signals, not code quality. Certificate
+alternatives, including the individual *Certum Open Source Code Signing in the
+Cloud* (~€49/year), are compared in [SIGNPATH-SETUP.md](SIGNPATH-SETUP.md).
 
 **Alternative — sign locally with your own certificate.** If you hold a code
 signing certificate (e.g. Certum Open Source Code Signing, or an OV
@@ -303,14 +313,17 @@ certificate), sign the built binaries yourself:
 
 ## Code signing policy
 
-**Code signing policy:** free code signing provided by
-[SignPath.io](https://about.signpath.io), certificate by
+**Code signing policy (from the first signed release):** free code signing
+provided by [SignPath.io](https://about.signpath.io), certificate by
 [SignPath Foundation](https://signpath.org).
 
-Official release binaries (the application `.exe` and the installer `.exe`) are
-compiled on GitHub-hosted runners and signed through SignPath before they are
-published. Roles, the exact list of signed artifacts, the pipeline and
-verification instructions are in **[CODE-SIGNING.md](CODE-SIGNING.md)**.
+Signing is being arranged — the Foundation review asked for more public
+adoption first, so **current releases are unsigned** (status note in
+[CODE-SIGNING.md](CODE-SIGNING.md)). From the first signed release on, official
+binaries (the application `.exe` and the installer `.exe`) will be compiled on
+GitHub-hosted runners and signed through SignPath before publication. Roles,
+the exact list of signed artifacts, the pipeline and verification instructions
+are in **[CODE-SIGNING.md](CODE-SIGNING.md)**.
 
 Verify a downloaded file:
 
@@ -356,10 +369,14 @@ service log (see below) says why.
 `%LOCALAPPDATA%\Autodesk\Logs` — the diagnostic lists the newest ones it finds.
 
 **Is it signed? Why does Windows show "Unknown Publisher"?**
-Code signing is in progress through [SignPath Foundation](https://signpath.org)
-for open-source projects (see [CODE-SIGNING.md](CODE-SIGNING.md)). Until the
-signed build is published, verify the **SHA256** of your download before running
-it.
+Not yet. The project applied to the [SignPath
+Foundation](https://signpath.org) for free open-source code signing; the review
+deferred it until the project shows broader community adoption, and a
+re-application (plus a low-cost certificate alternative) is planned — see
+[CODE-SIGNING.md](CODE-SIGNING.md). Until a signed build is published, Windows
+may show *"Unknown Publisher"* / *"Windows protected your PC"*: choose **More
+info → Run anyway**, and verify the **SHA256** of your download first (see
+*Verify your download*).
 
 **Does it work on Windows 7 / macOS?**
 No. Windows 10 and Windows 11 only, and only the Windows Autodesk products.
