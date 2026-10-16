@@ -1,5 +1,21 @@
 ﻿# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases
 
+## v1.3.2  (2026-10-17 01:59:33)
+
+### Fixed
+- The final **Launch Autodesk Licensing Doctor** checkbox in the Setup no longer fails with `CreateProcess failed; code 740` (the requested operation requires elevation) when Setup is started by double-click.
+  - Cause: with the `postinstall` flag, Inno Setup runs the entry with the pre-UAC (non-elevated) token, and a non-elevated process cannot start an exe whose manifest requires administrator.
+  - Fix: the entry now uses `runascurrentuser`, so the app inherits the elevated credentials of Setup and opens cleanly - with no second UAC prompt.
+
+### Notes
+- The application itself is unchanged from v1.3.1; diagnostics, backup, clean, repair and purge behave the same.
+- Already on v1.3.1? Nothing to reinstall - the Start Menu and desktop shortcuts were never affected, only the auto-launch at the end of Setup. Fresh installs should use this v1.3.2 setup.
+
+
+- `AdskDoctor-v1.3.2-Project.zip`  -  0.16 MB  -  SHA256 `62EAB39C0D8FD92226EA304355A6ACCD2F8E884B3AD3DE9C11F954F1410828FD`
+- `AdskDoctor-v1.3.2-Portable.zip`  -  0.16 MB  -  SHA256 `B61EFC761CCF212B620D46FDD0EAE60B165E3440B715BEBCD72E16075EFB75C1`
+- `UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.2.exe`  -  2.12 MB  -  SHA256 `CE23A94FC97F32635633E4CF022CDCA770C03AB8E99F31DDA33DB3B63E232E95`
+
 ## v1.3.1  (2026-10-16 18:22:32)
 
 Final polish - validated in the lab VM end-to-end (preview -> apply -> independent scan).
