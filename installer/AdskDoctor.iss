@@ -71,8 +71,16 @@ Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyExe}"; IconFilename: "{app}\AdskDoctor.ico"; WorkingDir: "{app}"; Comment: "{#MyPublisher} - {#MyAppName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyExe}"; IconFilename: "{app}\AdskDoctor.ico"; WorkingDir: "{app}"; Tasks: desktopicon
 
+; The app exe carries a requireAdministrator manifest (Build-Release.ps1
+; compiles it with -requireAdmin). With the postinstall flag Inno's default is
+; runasoriginaluser, i.e. the non-elevated pre-UAC token, and CreateProcess
+; cannot raise a UAC prompt - that dies with "code 740, the requested operation
+; requires elevation" whenever Setup was started by double-click (the normal
+; path: UAC consent elevates Setup, but the original token stays non-elevated).
+; runascurrentuser makes the app inherit Setup's elevated credentials instead,
+; so the "Launch" checkbox works - and without a second UAC prompt.
 [Run]
-Filename: "{app}\{#MyExe}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyExe}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent runascurrentuser
 
 ; A scan writes report.html / report.json next to the application. Removing them
 ; lets Inno Setup delete the now-empty folder, so an uninstall leaves nothing
