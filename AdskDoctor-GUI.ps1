@@ -58,7 +58,7 @@ $L = @{
   ar = @{
     windowTitle   = 'UNLOCK DIGITAL - دكتور ترخيص أوتوديسك'
     brand         = 'UNLOCK DIGITAL'
-    subtitle      = 'دكتور ترخيص أوتوديسك  —  تشخيص وإصلاح مشاكل الترخيص'
+    subtitle      = 'تشخيص وإصلاح مشاكل الترخيص'
     brandSmall    = 'دكتور ترخيص أوتوديسك'
     actions       = 'الإجراءات'
     bDiag         = 'فحص الجهاز (تشخيص)'
@@ -119,7 +119,7 @@ $L = @{
   en = @{
     windowTitle   = 'UNLOCK DIGITAL - Autodesk Licensing Doctor'
     brand         = 'UNLOCK DIGITAL'
-    subtitle      = 'Autodesk Licensing Doctor  —  diagnose and fix licensing problems'
+    subtitle      = 'Diagnose and fix licensing problems'
     brandSmall    = 'Autodesk Licensing Doctor'
     actions       = 'Actions'
     bDiag         = 'Scan this PC (diagnose)'
@@ -210,7 +210,7 @@ function T { param([string]$k) $L[$script:lang][$k] }
           <Image x:Name="LogoImage" Height="58" Margin="0,0,16,0" Stretch="Uniform" Visibility="Collapsed"/>
           <StackPanel VerticalAlignment="Center">
             <TextBlock x:Name="BrandText" Text="UNLOCK DIGITAL" Foreground="White" FontSize="26" FontWeight="Bold"/>
-            <TextBlock x:Name="SubTitle" Text="" Foreground="#AEB3BD" FontSize="13" Margin="0,4,0,0"/>
+            <TextBlock x:Name="SubTitle" Text="" Foreground="#AEB3BD" FontSize="13" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
           </StackPanel>
         </StackPanel>
         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
