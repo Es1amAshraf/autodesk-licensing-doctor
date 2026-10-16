@@ -166,8 +166,14 @@ if ($ViaGitHubActions) {
 }
 
 Write-Step "Creating the GitHub release ..."
-$ghOut = & gh release create $tag $setupExe $zipPort $zipProj `
-    --title "$tag" --notes-file $notesFile 2>&1
+# same Windows PowerShell 5.1 stderr guard as in Invoke-Git: a stderr line from
+# gh under 'Stop' would abort the script right as it publishes
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+    $ghOut = & gh release create $tag $setupExe $zipPort $zipProj `
+        --title "$tag" --notes-file $notesFile 2>&1
+} finally { $ErrorActionPreference = $prevEAP }
 $code = $LASTEXITCODE
 $ghOut | ForEach-Object { if ($_ -is [string]) { Write-Host ("      " + $_) -ForegroundColor DarkGray } }
 if ($code -ne 0) { throw "gh release create failed (exit $code)." }
