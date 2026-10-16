@@ -1,5 +1,47 @@
 ﻿# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases
 
+## v1.3.1  (2026-10-16 18:22:32)
+
+Final polish - validated in the lab VM end-to-end (preview -> apply -> independent scan).
+
+**Operation logs on disk**
+
+- `Purge.ps1`, `Clean.ps1` and `Repair.ps1` now record a full transcript of every
+  run to `%ProgramData%\UNLOCK DIGITAL\logs`, and the support bundle collects
+  them as `logs\op-*.log` automatically - a support request now carries exactly
+  what the tool did.
+
+**Smarter, safer removal**
+
+- Desktop and Start Menu shortcuts are also removed by their *resolved target*,
+  so a renamed leftover icon pointing into an Autodesk folder is caught too -
+  while the toolkit's own launcher and ordinary apps (e.g. OneDrive shortcuts
+  inside a user profile) are never touched.
+- The full-removal wipe now cleans Autodesk keys in **every** user profile, not
+  just the current one: other logged-on accounts are cleaned in place, and
+  offline profiles are mounted briefly (`reg load` / `unload`, with retries)
+  and cleaned as well.
+- The mandatory backup exports the same keys from every profile; offline
+  exports are re-tagged with the real SID so `UNDO.ps1` can restore them when
+  that account is loaded again.
+
+**GUI**
+
+- The Actions panel no longer shows a scrollbar (wheel scrolling still works
+  when the window is small).
+
+**Lab validation (this release)**
+
+- Seeds planted: a renamed shortcut on the Public Desktop, current-user keys,
+  keys in a second loaded account, and keys in an offline profile. Preview
+  listed all of them; `-Apply` finished with `Failures: 0`; the built-in
+  verification and an independent remnant scan both reported the machine clean
+  (`VERDICT: CLEAN`); the support bundle contained the new `op-*.log` files.
+
+- `AdskDoctor-v1.3.1-Project.zip`  -  0.16 MB  -  SHA256 `6F22371D13DCD1F47B0583312160597DC9E56F01619AB7EA6E4669CCA4132A33`
+- `AdskDoctor-v1.3.1-Portable.zip`  -  0.16 MB  -  SHA256 `DBB90CA30B9929D99C533EE9F3D04275520C30DDA378271D86D7A8CE8C30002A`
+- `UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.1.exe`  -  2.12 MB  -  SHA256 `AF364B478A2A25198B3B5015F586FD599C9A8F017939FEF1ACE459276D26077E`
+
 ## v1.3.0  (2026-10-16 17:31:33)
 
 Full removal (Phase 5) and two new top-bar buttons - validated in a lab VM on

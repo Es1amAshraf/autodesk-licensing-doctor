@@ -42,6 +42,23 @@ $script:Changes   = 0
 $script:Errors    = 0
 $script:BackupDir = $null
 
+# ---------------------------------------------------------------------------
+# Operation log: every run lands in %ProgramData%\UNLOCK DIGITAL\logs (or the
+# folder in ADSKDOCTOR_LOGDIR) so a support request can carry it. The
+# transcript also captures the output of the child uninstallers.
+# Never fatal: if the folder cannot be created the run continues without a
+# log. ADSKDOCTOR_NOLOG=1 turns logging off (the test suite sets it).
+# ---------------------------------------------------------------------------
+$script:LogPath = $null
+if (-not $env:ADSKDOCTOR_NOLOG) {
+    try {
+        $logRoot = if ($env:ADSKDOCTOR_LOGDIR) { $env:ADSKDOCTOR_LOGDIR } else { Join-Path $env:ProgramData 'UNLOCK DIGITAL\logs' }
+        New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
+        $script:LogPath = Join-Path $logRoot ('purge-{0}.log' -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+        Start-Transcript -LiteralPath $script:LogPath -Force | Out-Null
+    } catch { $script:LogPath = $null }
+}
+
 function Step {
     param([string]$Desc, [scriptblock]$Do)
     if ($script:Apply) {
@@ -108,6 +125,7 @@ Write-Host '   Autodesk Licensing Doctor  -  Phase 5: Full removal' -ForegroundC
 Write-Host '============================================================' -ForegroundColor Cyan
 Write-Host ("   Mode    : {0}" -f $(if ($Apply) { 'APPLY (will remove everything Autodesk)' } else { 'PREVIEW (nothing changes)' })) -ForegroundColor $(if ($Apply) {'Yellow'} else {'Green'})
 Write-Host ("   Admin   : {0}" -f $isAdmin)
+if ($script:LogPath) { Write-Host ("   Log     : {0}" -f $script:LogPath) -ForegroundColor DarkGray }
 
 if ($Apply -and -not $isAdmin) {
     Write-Host '   ERROR: -Apply requires an administrator shell.' -ForegroundColor Red
@@ -474,6 +492,7 @@ Section 'Start Menu / Desktop shortcuts'
 $shortcutPattern = 'autodesk|autocad|revit|inventor|navisworks|3ds ?max|maya|civil ?3d|advance steel|robot structural|infraworks|recap|desktop connector|fusion ?360'
 $menuRoots = @((Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs'))
 foreach ($u in $userProfiles) { $menuRoots += (Join-Path $u 'AppData\Roaming\Microsoft\Windows\Start Menu\Programs') }
+$menuRoots = @($menuRoots | Select-Object -Unique)
 $shortcutFound = $false
 foreach ($mr in $menuRoots) {
     if (-not (Test-Path -LiteralPath $mr)) { continue }
@@ -488,12 +507,44 @@ foreach ($mr in $menuRoots) {
 }
 $desktopRoots = @((Join-Path $env:PUBLIC 'Desktop'))
 foreach ($u in $userProfiles) { $desktopRoots += (Join-Path $u 'Desktop') }
+$desktopRoots = @($desktopRoots | Select-Object -Unique)
 foreach ($dr in $desktopRoots) {
     if (-not (Test-Path -LiteralPath $dr)) { continue }
     foreach ($f in @(Get-ChildItem -LiteralPath $dr -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -eq '.lnk' -and $_.BaseName -match $shortcutPattern })) {
         $ff = $f.FullName; $shortcutFound = $true
         Step ("Remove desktop shortcut {0}" -f $f.Name) { Remove-Item -LiteralPath $ff -Force }
     }
+}
+# Shortcuts whose name says nothing but whose target points into an Autodesk
+# area go too (e.g. a renamed link to C:\Program Files\Autodesk\...). The link
+# target is resolved read-only and only Autodesk targets match, so unrelated
+# links (Office, games, tools) are never touched. The toolkit's own launcher is
+# always protected - by name and by living inside our own folder.
+# Short tokens are anchored to a path separator so a user profile like
+# "C:\Users\adsk" or a document named "recap.docx" can never match. Autodesk's
+# own paths all carry "Autodesk", a product name, or AdLM/ODIS/FlexNet.
+$targetPattern = '(?i)\\autodesk|\\adlm\b|\\odis\b|\\acad\b|\\autocad|\\revit|\\inventor|\\navisworks|3ds ?max|\\maya\b|civil ?3d|\\infraworks|\\recap\b|\\flexlm|\\flexnet'
+$targetLinks = @()
+foreach ($r in @($menuRoots + $desktopRoots)) {
+    if (-not (Test-Path -LiteralPath $r)) { continue }
+    $targetLinks += @(Get-ChildItem -LiteralPath $r -File -Recurse -Depth 2 -ErrorAction SilentlyContinue | Where-Object { $_.Extension -eq '.lnk' -and $_.BaseName -notmatch $shortcutPattern })
+}
+$targetLinks = @($targetLinks | Group-Object -Property FullName | ForEach-Object { $_.Group[0] })
+if ($targetLinks.Count -gt 0) {
+    try {
+        $wsh = New-Object -ComObject WScript.Shell
+        foreach ($lnk in $targetLinks) {
+            if ($lnk.BaseName -match '^(AdskDoctor|UNLOCK)') { continue }   # never the toolkit's own launcher
+            $tgt = $null
+            try { $tgt = [string]$wsh.CreateShortcut($lnk.FullName).TargetPath } catch { continue }
+            if (-not $tgt) { continue }
+            if ($PSScriptRoot -and ($tgt -like ($PSScriptRoot + '\*'))) { continue }   # the toolkit's own folder
+            if ($tgt -notmatch $targetPattern) { continue }
+            $shortcutFound = $true
+            $lf = $lnk.FullName
+            Step ("Remove shortcut {0} (points into {1})" -f $lnk.Name, $tgt) { Remove-Item -LiteralPath $lf -Force }
+        }
+    } catch { Write-Host ('  (shortcut target scan failed: ' + $_.Exception.Message + ')') -ForegroundColor DarkGray }
 }
 if (-not $shortcutFound) { Write-Host '  none' -ForegroundColor DarkGray }
 
@@ -515,6 +566,78 @@ foreach ($rk2 in $regKeys) {
     $regFound = $true
     $rkp2 = $rk2; $rp2 = Get-RegPath $rk2
     Step ("Remove registry key {0}" -f $rp2) { Remove-Item -LiteralPath $rkp2 -Recurse -Force }
+}
+
+# The HKCU entries above only cover the account that runs the purge. A full
+# removal also clears every OTHER profile: hives that are loaded right now
+# (logged-on accounts, live in HKEY_USERS) and offline profiles whose
+# NTUSER.DAT is mounted for the sweep and unloaded again.
+$userKeyNames = @('SOFTWARE\Autodesk', 'SOFTWARE\FLEXlm License Manager')
+$currentSid = $null
+try { $currentSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value } catch { }
+$loadedSids = @()
+foreach ($hu in @(Get-ChildItem -LiteralPath 'Registry::HKEY_USERS' -ErrorAction SilentlyContinue)) {
+    $sid = $hu.PSChildName
+    if ($sid -eq '.DEFAULT' -or $sid -eq $currentSid -or $sid -like '*_Classes') { continue }
+    if ($sid -match '^S-1-5-(18|19|20)$') { continue }
+    $loadedSids += $sid
+    foreach ($sub in $userKeyNames) {
+        $p = 'Registry::HKEY_USERS\{0}\{1}' -f $sid, $sub
+        if (Test-Path -LiteralPath $p) {
+            $regFound = $true
+            $pk = $p
+            Step ("Remove registry key HKEY_USERS\{0}\{1} (other logged-on account)" -f $sid, $sub) { Remove-Item -LiteralPath $pk -Recurse -Force }
+        }
+    }
+}
+
+# Offline profiles: map every profile folder -> SID through ProfileList, skip
+# anyone loaded or current, then mount, clean and unmount. Preview only names
+# them (nothing is mounted in preview mode).
+$sidByDir = @{}
+foreach ($pl in @(Get-ChildItem -LiteralPath 'Registry::HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList' -ErrorAction SilentlyContinue)) {
+    try {
+        $img = [string](Get-ItemProperty -LiteralPath $pl.PSPath -Name 'ProfileImagePath' -ErrorAction Stop).ProfileImagePath
+        if ($img) { $sidByDir[$img.TrimEnd('\')] = $pl.PSChildName }
+    } catch { }
+}
+foreach ($dir in @($sidByDir.Keys)) {
+    $sid = $sidByDir[$dir]
+    if ($sid -eq $currentSid -or $loadedSids -contains $sid) { continue }
+    if ($sid -match '^S-1-5-(18|19|20)$') { continue }
+    if (-not (Test-Path -LiteralPath $dir)) { continue }
+    $hiveFile = Join-Path $dir 'NTUSER.DAT'
+    if (-not (Test-Path -LiteralPath $hiveFile)) { continue }
+    $regFound = $true
+    $label = Split-Path -Leaf $dir
+    if (-not $Apply) {
+        Write-Host ("  [preview] Clean Autodesk keys from offline profile {0} (hive mounted and unloaded again)" -f $label) -ForegroundColor DarkGray
+        continue
+    }
+    $mount = 'HKU\UlPurgeTmp{0}' -f (Get-Random)
+    & reg.exe load $mount $hiveFile 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ("  note: profile hive of {0} is in use or unreadable - skipped" -f $label) -ForegroundColor DarkGray
+        continue
+    }
+    try {
+        foreach ($sub in $userKeyNames) {
+            $subPath = 'Registry::HKEY_USERS\{0}\{1}' -f ($mount -replace '^HKU\\',''), $sub
+            if (Test-Path -LiteralPath $subPath) {
+                $sp = $subPath
+                Step ("Remove registry key {0}\{1} (offline profile {2})" -f $mount, $sub, $label) { Remove-Item -LiteralPath $sp -Recurse -Force }
+            }
+        }
+    } finally {
+        [gc]::Collect()
+        $unloaded = $false
+        for ($ui = 0; $ui -lt 5 -and -not $unloaded; $ui++) {
+            Start-Sleep -Milliseconds 400
+            & reg.exe unload $mount 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) { $unloaded = $true }
+        }
+        if (-not $unloaded) { Write-Host ("  note: hive {0} could not be unloaded yet - it clears at the next reboot" -f $label) -ForegroundColor Yellow }
+    }
 }
 if (-not $regFound) { Write-Host '  none' -ForegroundColor DarkGray }
 
@@ -666,3 +789,7 @@ if ($Apply) {
     Write-Host '   Run again with  -Apply  to remove everything listed above (a backup runs first).' -ForegroundColor Yellow
 }
 Write-Host ''
+if ($script:LogPath) {
+    Write-Host ("   Log saved: {0}" -f $script:LogPath) -ForegroundColor DarkGray
+    try { Stop-Transcript | Out-Null } catch { }
+}

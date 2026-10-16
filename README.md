@@ -22,16 +22,16 @@ Windows 10 / 11 · GUI in **Arabic + English** · no installation required.
 
 | What | Link |
 |------|------|
-| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.0.exe` (2.1 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.3.0/UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.0.exe) |
+| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.1.exe` (2.12 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.3.1/UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.1.exe) |
 | Portable `.zip` (no install) and full source | [releases page](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest) |
 | Always the newest release | <https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest> |
 
 SHA256 of the files above (also in `SHA256SUMS.txt` on the release page):
 
 ```text
-02C5B670690D0793AB08CCAC82F532C8CB261C8E5C326271CCD63DE941DB0026  UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.0.exe
-8A734E61FD58067E4C300B130E0BD3F0C61659B7603346FEDA5F6D228C8A03F9  AdskDoctor-v1.3.0-Portable.zip
-948A5C765CCEDD5B9FF0CC17F5188FF324A608CDCCC2B40D10EF66981B8949BB  AdskDoctor-v1.3.0-Project.zip
+AF364B478A2A25198B3B5015F586FD599C9A8F017939FEF1ACE459276D26077E  UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.1.exe
+DBB90CA30B9929D99C533EE9F3D04275520C30DDA378271D86D7A8CE8C30002A  AdskDoctor-v1.3.1-Portable.zip
+6F22371D13DCD1F47B0583312160597DC9E56F01619AB7EA6E4669CCA4132A33  AdskDoctor-v1.3.1-Project.zip
 ```
 
 See [Verify your download](#verify-your-download).
@@ -245,7 +245,7 @@ module and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (for the installer 
 
 ```powershell
 # compile the exe and cut a release (Project.zip + Portable.zip + Setup.exe + record)
-.\Build-Release.ps1 -Version 1.3.0 -Notes "..." -Recompile
+.\Build-Release.ps1 -Version 1.3.1 -Notes "..." -Recompile
 ```
 
 Each release is stored under `releases\v<version>\` in **three forms**:
@@ -295,8 +295,8 @@ certificate), sign the built binaries yourself:
 
 ```powershell
 .\Sign.ps1 -List                                    # show usable certificates
-.\Sign.ps1 -Path .\releases\v1.3.0\*.exe -Thumbprint <sha1>
-.\Sign.ps1 -Verify -Path .\releases\v1.3.0\*.exe     # check a release
+.\Sign.ps1 -Path .\releases\v1.3.1\*.exe -Thumbprint <sha1>
+.\Sign.ps1 -Verify -Path .\releases\v1.3.1\*.exe     # check a release
 ```
 
 ---
@@ -345,7 +345,7 @@ are in **[CODE-SIGNING.md](CODE-SIGNING.md)**.
 Verify a downloaded file:
 
 ```powershell
-Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.0.exe |
+Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.1.exe |
     Format-List Status, SignerCertificate
 ```
 

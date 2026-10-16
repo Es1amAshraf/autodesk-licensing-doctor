@@ -52,6 +52,22 @@ $ProgressPreference    = 'SilentlyContinue'
 $script:Changes = 0
 $script:Errors  = 0
 
+# ---------------------------------------------------------------------------
+# Operation log: every run lands in %ProgramData%\UNLOCK DIGITAL\logs (or the
+# folder in ADSKDOCTOR_LOGDIR) so a support request can carry it. Never fatal:
+# if the folder cannot be created the run continues without a log.
+# ADSKDOCTOR_NOLOG=1 turns logging off (the test suite sets it).
+# ---------------------------------------------------------------------------
+$script:LogPath = $null
+if (-not $env:ADSKDOCTOR_NOLOG) {
+    try {
+        $logRoot = if ($env:ADSKDOCTOR_LOGDIR) { $env:ADSKDOCTOR_LOGDIR } else { Join-Path $env:ProgramData 'UNLOCK DIGITAL\logs' }
+        New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
+        $script:LogPath = Join-Path $logRoot ('repair-{0}.log' -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+        Start-Transcript -LiteralPath $script:LogPath -Force | Out-Null
+    } catch { $script:LogPath = $null }
+}
+
 function Step {
     param([string]$Desc, [scriptblock]$Do)
     if ($script:Apply) {
@@ -82,6 +98,7 @@ Write-Host '   Autodesk Licensing Doctor  -  Phase 4: Repair' -ForegroundColor C
 Write-Host '============================================================' -ForegroundColor Cyan
 Write-Host ("   Mode  : {0}" -f $(if ($Apply) { 'APPLY (will make changes)' } else { 'PREVIEW (nothing changes)' })) -ForegroundColor $(if ($Apply) {'Yellow'} else {'Green'})
 Write-Host ("   Admin : {0}" -f $isAdmin)
+if ($script:LogPath) { Write-Host ("   Log   : {0}" -f $script:LogPath) -ForegroundColor DarkGray }
 if ($Apply -and -not $isAdmin) { Write-Host '   ERROR: -Apply needs an administrator shell.' -ForegroundColor Red; exit 1 }
 
 $commonFiles = Join-Path ${env:ProgramFiles(x86)} 'Common Files\Autodesk Shared'
@@ -425,3 +442,7 @@ if ($Apply) {
     Write-Host '   Add  -Apply  to perform the repair.' -ForegroundColor Yellow
 }
 Write-Host ''
+if ($script:LogPath) {
+    Write-Host ("   Log saved: {0}" -f $script:LogPath) -ForegroundColor DarkGray
+    try { Stop-Transcript | Out-Null } catch { }
+}

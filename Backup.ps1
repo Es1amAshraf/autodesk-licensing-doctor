@@ -125,6 +125,92 @@ foreach ($k in $regKeys) {
     if ($LASTEXITCODE -eq 0) { $regExported++; Add-Item 'registry' $k $out 'ok' }
     else { Add-Item 'registry' $k '' 'failed' }
 }
+
+# Every OTHER profile gets the same per-user keys exported (the purge wipes
+# them machine-wide): loaded accounts are exported directly, offline accounts
+# through a short hive mount. Offline exports are re-tagged with the real SID
+# so UNDO.ps1 can import them the next time that account is loaded.
+$userRegNames = @('SOFTWARE\Autodesk', 'SOFTWARE\FLEXlm License Manager')
+$backupSid = $null
+try { $backupSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value } catch { }
+foreach ($hu in @(Get-ChildItem -LiteralPath 'Registry::HKEY_USERS' -ErrorAction SilentlyContinue)) {
+    $sid = $hu.PSChildName
+    if ($sid -eq '.DEFAULT' -or $sid -eq $backupSid -or $sid -like '*_Classes') { continue }
+    if ($sid -match '^S-1-5-(18|19|20)$') { continue }
+    foreach ($sub in $userRegNames) {
+        $k = 'HKU\{0}\{1}' -f $sid, $sub
+        $exists = $false
+        try { $exists = (Test-Path -LiteralPath ("Registry::" + $k)) } catch {}
+        if (-not $exists) { continue }
+        $safe = ($k -replace '[\\:*?"<>|]','_')
+        $out  = Join-Path $regDir ($safe + '.reg')
+        & reg.exe export "$k" "$out" /y *> $null
+        if ($LASTEXITCODE -eq 0) { $regExported++; Add-Item 'registry' $k $out 'ok' }
+        else { Add-Item 'registry' $k '' 'failed' }
+    }
+}
+$bkpSidByDir = @{}
+try {
+    foreach ($pl in @(Get-ChildItem -LiteralPath 'Registry::HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList' -ErrorAction SilentlyContinue)) {
+        try {
+            $img = [string](Get-ItemProperty -LiteralPath $pl.PSPath -Name 'ProfileImagePath' -ErrorAction Stop).ProfileImagePath
+            if ($img) { $bkpSidByDir[$img.TrimEnd('\')] = $pl.PSChildName }
+        } catch { }
+    }
+} catch { }
+foreach ($dir in @($bkpSidByDir.Keys)) {
+    $sid = $bkpSidByDir[$dir]
+    if ($sid -eq $backupSid) { continue }
+    if ($sid -match '^S-1-5-(18|19|20)$') { continue }
+    $mounted = $false
+    try { $mounted = (Test-Path -LiteralPath ("Registry::HKEY_USERS\" + $sid)) } catch {}
+    if ($mounted) { continue }
+    if (-not (Test-Path -LiteralPath $dir)) { continue }
+    $hiveFile = Join-Path $dir 'NTUSER.DAT'
+    if (-not (Test-Path -LiteralPath $hiveFile)) { continue }
+    $mountName = 'UlBkpTmp{0}' -f (Get-Random)
+    $mount = 'HKU\' + $mountName
+    & reg.exe load $mount $hiveFile 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Say ('  note: profile hive of {0} could not be mounted for backup - skipped' -f (Split-Path -Leaf $dir)) 'Yellow'
+        continue
+    }
+    try {
+        foreach ($sub in $userRegNames) {
+            $k = '{0}\{1}' -f $mount, $sub
+            $exists = $false
+            try { $exists = (Test-Path -LiteralPath ("Registry::" + $k)) } catch {}
+            if (-not $exists) { continue }
+            # the backup file and its content both carry the real SID, never the
+            # temporary mount name, so UNDO.ps1 can import it later
+            $sidPath = $k -replace [regex]::Escape($mountName), $sid
+            $safe = ($sidPath -replace '[\\:*?"<>|]','_')
+            $out  = Join-Path $regDir ($safe + '.reg')
+            & reg.exe export "$k" "$out" /y *> $null
+            if ($LASTEXITCODE -eq 0) {
+                try {
+                    # reg.exe writes HKEY_USERS\<mount>... - swap the temporary
+                    # mount name for the real SID before the hive is unloaded
+                    $txt = Get-Content -LiteralPath $out -Raw
+                    $txt = $txt -replace [regex]::Escape($mountName), $sid
+                    Set-Content -LiteralPath $out -Value $txt -Encoding Unicode
+                } catch { }
+                $regExported++; Add-Item 'registry' $sidPath $out 'ok'
+            }
+            else { Add-Item 'registry' $k '' 'failed' }
+        }
+    } finally {
+        [gc]::Collect()
+        $unloaded = $false
+        for ($ui = 0; $ui -lt 5 -and -not $unloaded; $ui++) {
+            Start-Sleep -Milliseconds 300
+            & reg.exe unload $mount 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) { $unloaded = $true }
+        }
+        if (-not $unloaded) { Say ('  note: backup hive {0} could not be unloaded - it clears at reboot' -f (Split-Path -Leaf $dir)) 'Yellow' }
+    }
+}
+
 Say ("  registry keys exported: {0}" -f $regExported) 'Gray'
 
 # ---------------------------------------------------------------------------

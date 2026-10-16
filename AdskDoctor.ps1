@@ -1311,6 +1311,17 @@ if ($Bundle) {
             Copy-Item -LiteralPath $lf.FullName -Destination (Join-Path $logDir ("{0:D2}-{1}-{2}" -f $i, $tag, $lf.Name)) -Force -ErrorAction SilentlyContinue
         }
 
+        # operation logs of the toolkit itself (Clean / Repair / Purge runs)
+        $opCount = 0
+        $opDir = Join-Path $env:ProgramData 'UNLOCK DIGITAL\logs'
+        if (Test-Path -LiteralPath $opDir) {
+            foreach ($lf in @(Get-ChildItem -LiteralPath $opDir -File -Filter '*.log' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 6)) {
+                if ($lf.Length -gt 10MB) { continue }   # keep the bundle sendable
+                $opCount++
+                Copy-Item -LiteralPath $lf.FullName -Destination (Join-Path $logDir ('op-' + $lf.Name)) -Force -ErrorAction SilentlyContinue
+            }
+        }
+
         $info = @(
             'Autodesk Licensing Doctor - support bundle',
             ('Computer : ' + $env:COMPUTERNAME),
@@ -1328,6 +1339,7 @@ if ($Bundle) {
         foreach ($g in $warnByCat) { $info += ('  WARN  ' + $g.Name + ' (' + $g.Count + ')') }
         $info += ''
         $info += ('Licensing logs collected: ' + $i)
+        $info += ('Tool operation logs collected: ' + $opCount)
         $info | Set-Content -LiteralPath (Join-Path $stage 'system-info.txt') -Encoding UTF8
 
         $zip = Join-Path $base ('AdskDoctor-Support-' + $env:COMPUTERNAME + '-' + $stamp + '.zip')
@@ -1336,7 +1348,7 @@ if ($Bundle) {
         Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
         Write-Host ''
         Write-Host ("Support bundle: {0}" -f $zip) -ForegroundColor Green
-        Write-Host '   (the report + licensing logs + system info - send this one file with a support request)' -ForegroundColor DarkGray
+        Write-Host '   (the report + tool & licensing logs + system info - send this one file with a support request)' -ForegroundColor DarkGray
     } catch {
         Write-Host ("Could not create the support bundle: {0}" -f $_.Exception.Message) -ForegroundColor Red
     }

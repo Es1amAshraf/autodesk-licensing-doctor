@@ -235,7 +235,7 @@ function T { param([string]$k) $L[$script:lang][$k] }
       <!-- The panel scrolls, so a short window never cuts the tip line in half
            (the buttons grew with every release and the default height is fixed). -->
       <Border Grid.Column="0" Background="White" CornerRadius="10" Padding="14" Margin="0,0,14,0">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
         <StackPanel>
           <TextBlock x:Name="ActionsLabel" Text="Actions" FontSize="15" FontWeight="SemiBold" Foreground="#333" Margin="0,0,0,8"/>
           <Button x:Name="BtnDiag"   Content="" Height="40" Margin="0,0,0,6" FontSize="13"/>

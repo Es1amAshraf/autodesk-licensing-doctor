@@ -45,9 +45,14 @@ BeforeAll {
 
     function Get-HostsHash { (Get-FileHash -LiteralPath $script:Hosts -Algorithm SHA256).Hash }
     function Get-HostsText { Get-Content -LiteralPath $script:Hosts -Raw }
+
+    # The action scripts write an operation log on every run; the suite turns
+    # that off for everything it launches (the logging test flips it back on).
+    $env:ADSKDOCTOR_NOLOG = '1'
 }
 
 AfterAll {
+    Remove-Item Env:\ADSKDOCTOR_NOLOG -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $script:Tmp -Recurse -Force -ErrorAction SilentlyContinue
     if ($script:FakeLicMade) {
         Remove-Item -LiteralPath $script:FakeLic -Recurse -Force -ErrorAction SilentlyContinue
@@ -555,5 +560,97 @@ Describe 'Full removal (Purge.ps1)' {
         # it now lives in the header, in front of the language toggle
         $gui | Should -Not -Match 'BtnDownload[^>]*Height="38"'
         $gui | Should -Match 'BtnDownload[\s\S]{0,600}BtnPurge[\s\S]{0,600}BtnLang'
+    }
+}
+
+Describe 'Operation logs and smarter removal (v1.3.1 hardening)' {
+    It 'writes an operation log a support request can carry' {
+        $oldNoLog  = $env:ADSKDOCTOR_NOLOG
+        $oldLogDir = $env:ADSKDOCTOR_LOGDIR
+        try {
+            Remove-Item Env:\ADSKDOCTOR_NOLOG -ErrorAction SilentlyContinue
+            $env:ADSKDOCTOR_LOGDIR = Join-Path $script:Tmp 'oplogs'
+            $null = Invoke-ToolScript 'Clean.ps1'
+            $logs = @(Get-ChildItem -LiteralPath $env:ADSKDOCTOR_LOGDIR -Filter 'clean-*.log' -ErrorAction SilentlyContinue)
+            $logs.Count | Should -Be 1
+            $text = Get-Content -LiteralPath $logs[0].FullName -Raw
+            $text | Should -Match 'Phase 3'
+        } finally {
+            if ($null -ne $oldNoLog)  { $env:ADSKDOCTOR_NOLOG = $oldNoLog }  else { Remove-Item Env:\ADSKDOCTOR_NOLOG  -ErrorAction SilentlyContinue }
+            if ($null -ne $oldLogDir) { $env:ADSKDOCTOR_LOGDIR = $oldLogDir } else { Remove-Item Env:\ADSKDOCTOR_LOGDIR -ErrorAction SilentlyContinue }
+        }
+    }
+
+    It 'removes a renamed shortcut whose target points into an Autodesk folder' {
+        $desk = Join-Path $env:USERPROFILE 'Desktop'
+        $madeDesk = $false
+        if (-not (Test-Path -LiteralPath $desk)) { New-Item -ItemType Directory -Force -Path $desk | Out-Null; $madeDesk = $true }
+        $renamed = Join-Path $desk 'renamed-office-tool.lnk'
+        $neutral = Join-Path $desk 'neutral-tool.lnk'
+        $ours    = Join-Path $desk 'AdskDoctor-should-stay.lnk'
+        $ours2   = Join-Path $desk 'points-at-the-tool.lnk'
+        $onedrv  = Join-Path $desk 'onedrive-like.lnk'
+        try {
+            $wsh = New-Object -ComObject WScript.Shell
+            $s1 = $wsh.CreateShortcut($renamed)
+            $s1.TargetPath = 'C:\Program Files\Autodesk\AdODIS\V1\Installer.exe'
+            $s1.Save()
+            $s2 = $wsh.CreateShortcut($neutral)
+            $s2.TargetPath = (Join-Path $env:SystemRoot 'notepad.exe')
+            $s2.Save()
+            # the toolkit's own launcher survives even when a target looks
+            # suspicious - by name and by its own folder
+            $s3 = $wsh.CreateShortcut($ours)
+            $s3.TargetPath = 'C:\Program Files\Autodesk\AdODIS\V1\Installer.exe'
+            $s3.Save()
+            $s4 = $wsh.CreateShortcut($ours2)
+            $s4.TargetPath = (Join-Path $script:Root 'UNLOCK-DIGITAL-AdskDoctor.exe')
+            $s4.Save()
+            # a normal app shortcut inside the user's own profile must never be
+            # treated as an Autodesk target (regression: "\adsk" matched "C:\Users\adsk")
+            $s5 = $wsh.CreateShortcut($onedrv)
+            $s5.TargetPath = (Join-Path $env:USERPROFILE 'AppData\Local\Microsoft\OneDrive\OneDrive.exe')
+            $s5.Save()
+            $out = Invoke-ToolScript 'Purge.ps1'
+            $out | Should -Match 'renamed-office-tool\.lnk'
+            $out | Should -Match 'points into'
+            $out | Should -Not -Match 'neutral-tool\.lnk'
+            $out | Should -Not -Match 'AdskDoctor-should-stay\.lnk'
+            $out | Should -Not -Match 'points-at-the-tool\.lnk'
+            $out | Should -Not -Match 'onedrive-like\.lnk'
+        } finally {
+            Remove-Item -LiteralPath $renamed, $neutral, $ours, $ours2, $onedrv -Force -ErrorAction SilentlyContinue
+            if ($madeDesk) { Remove-Item -LiteralPath $desk -Force -ErrorAction SilentlyContinue }
+        }
+    }
+
+    It 'covers every user hive, loaded or offline, for the full removal and the backup' {
+        foreach ($n in @('Purge.ps1','Backup.ps1')) {
+            $src = Get-Content -LiteralPath (Join-Path $script:Root $n) -Raw
+            $src | Should -Match 'HKEY_USERS'
+            $src | Should -Match 'NTUSER\.DAT'
+            $src | Should -Match 'reg\.exe load'
+            $src | Should -Match 'ProfileList'
+        }
+    }
+
+    It 'every action script writes its own log and honours the switches' {
+        foreach ($n in @('Clean.ps1','Repair.ps1','Purge.ps1')) {
+            $src = Get-Content -LiteralPath (Join-Path $script:Root $n) -Raw
+            $src | Should -Match 'ADSKDOCTOR_NOLOG'
+            $src | Should -Match 'ADSKDOCTOR_LOGDIR'
+            $src | Should -Match 'Start-Transcript'
+            $src | Should -Match 'Stop-Transcript'
+        }
+    }
+
+    It 'the support bundle picks up the tool operation logs' {
+        $doc = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
+        $doc | Should -Match 'UNLOCK DIGITAL\\logs'
+    }
+
+    It 'keeps the action list scrollbar out of the UI' {
+        $gui = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor-GUI.ps1') -Raw
+        $gui | Should -Match 'ScrollViewer VerticalScrollBarVisibility="Hidden"'
     }
 }
