@@ -205,18 +205,41 @@ if ($bad.Count -eq 0) {
     Write-Host '  clean' -ForegroundColor DarkGray
 } else {
     Step ("Remove {0} hijacked line(s) from hosts (Autodesk + time servers)" -f $bad.Count) {
-        $keep = @($hostsLines | Where-Object { -not (Test-BadHostsLine $_) })
-        # The hosts file is a favourite target of real-time antivirus scans and
-        # brief locks have been seen on real machines - retry, then verify.
+        # The hosts file is watched in real time (antivirus, restore-point and
+        # other snapshots, licensing components) and brief exclusive locks are
+        # normal on real machines. Write a sibling file, swap it in atomically
+        # and retry for ~15 s. The original is never truncated in place, so a
+        # transient lock cannot leave it empty or half-written.
+        $lastErr = ''
         $ok = $false
-        for ($attempt = 1; $attempt -le 3 -and -not $ok; $attempt++) {
+        for ($attempt = 1; $attempt -le 12 -and -not $ok; $attempt++) {
+            $tmpHosts = "$hostsPath.new"
             try {
-                Set-Content -LiteralPath $hostsPath -Value $keep -Encoding ASCII -ErrorAction Stop
-                $stillBad = @(Get-Content -LiteralPath $hostsPath -ErrorAction SilentlyContinue | Where-Object { Test-BadHostsLine $_ }).Count
-                $ok = ($stillBad -eq 0)
-            } catch { Start-Sleep -Milliseconds 500 }
+                $fresh = @(Get-Content -LiteralPath $hostsPath -ErrorAction Stop)
+                $badNow = @($fresh | Where-Object { Test-BadHostsLine $_ })
+                if ($badNow.Count -eq 0) {
+                    $ok = $true
+                } else {
+                    $keepNow = @($fresh | Where-Object { -not (Test-BadHostsLine $_) })
+                    Set-ItemProperty -LiteralPath $hostsPath -Name IsReadOnly -Value $false -ErrorAction SilentlyContinue
+                    Set-Content -LiteralPath $tmpHosts -Value $keepNow -Encoding ASCII -ErrorAction Stop
+                    try {
+                        [System.IO.File]::Replace($tmpHosts, $hostsPath, $null)
+                    } catch {
+                        Remove-Item -LiteralPath $hostsPath -Force -ErrorAction Stop
+                        Move-Item -LiteralPath $tmpHosts -Destination $hostsPath -Force -ErrorAction Stop
+                    }
+                    $stillBad = @(Get-Content -LiteralPath $hostsPath -ErrorAction Stop | Where-Object { Test-BadHostsLine $_ }).Count
+                    $ok = ($stillBad -eq 0)
+                }
+            } catch {
+                $lastErr = $_.Exception.Message
+            } finally {
+                if (Test-Path -LiteralPath $tmpHosts) { Remove-Item -LiteralPath $tmpHosts -Force -ErrorAction SilentlyContinue }
+            }
+            if (-not $ok) { Start-Sleep -Milliseconds (200 + 220 * $attempt) }
         }
-        if (-not $ok) { throw 'the hosts file stayed locked and could not be cleaned - pause the antivirus and re-run' }
+        if (-not $ok) { throw ("the hosts file stayed locked and could not be cleaned - pause the antivirus and re-run (last error: {0})" -f $lastErr) }
     }
 }
 
