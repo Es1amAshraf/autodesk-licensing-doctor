@@ -229,7 +229,7 @@ module and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (for the installer 
 
 ```powershell
 # compile the exe and cut a release (Project.zip + Portable.zip + Setup.exe + record)
-.\Build-Release.ps1 -Version 1.2.8 -Notes "..." -Recompile
+.\Build-Release.ps1 -Version 1.2.9 -Notes "..." -Recompile
 ```
 
 Each release is stored under `releases\v<version>\` in **three forms**:
@@ -269,8 +269,8 @@ certificate), sign the built binaries yourself:
 
 ```powershell
 .\Sign.ps1 -List                                    # show usable certificates
-.\Sign.ps1 -Path .\releases\v1.2.8\*.exe -Thumbprint <sha1>
-.\Sign.ps1 -Verify -Path .\releases\v1.2.8\*.exe     # check a release
+.\Sign.ps1 -Path .\releases\v1.2.9\*.exe -Thumbprint <sha1>
+.\Sign.ps1 -Verify -Path .\releases\v1.2.9\*.exe     # check a release
 ```
 
 ---
@@ -315,7 +315,7 @@ verification instructions are in **[CODE-SIGNING.md](CODE-SIGNING.md)**.
 Verify a downloaded file:
 
 ```powershell
-Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.8.exe |
+Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.9.exe |
     Format-List Status, SignerCertificate
 ```
 

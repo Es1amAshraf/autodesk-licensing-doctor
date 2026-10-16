@@ -55,7 +55,10 @@ function Say {
 function Copy-Tree {
     param([string]$Source,[string]$DestPath)
     if (-not (Test-Path -LiteralPath $Source)) { return $false }
-    & robocopy $Source $DestPath /E /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+    # /XJ: robocopy follows junctions by default, which stored the doctored old
+    # build (behind AdskLicensing\Current) as a real folder and made UNDO copy
+    # its files through the junction into the genuine build (lab run 2026-10-16)
+    & robocopy $Source $DestPath /E /R:1 /W:1 /XJ /NFL /NDL /NJH /NJS /NP | Out-Null
     return ($LASTEXITCODE -lt 8)
 }
 
@@ -105,8 +108,11 @@ $regKeys = @(
     'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options',
     'HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows NT\CurrentVersion\Image File Execution Options',
     'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run',
+    'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce',
     'HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run',
-    'HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+    'HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\RunOnce',
+    'HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run',
+    'HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce'
 )
 $regExported = 0
 foreach ($k in $regKeys) {
@@ -136,22 +142,50 @@ if (Test-Path -LiteralPath $hostsPath) {
     Say '  hosts backed up' 'Gray'
 }
 
-# folders (recursive copies)
+# folders (recursive copies). The leaf name has to be unique per source: two
+# different folders can share it (a Network License Manager lives in Common
+# Files AND under C:\Autodesk), and copying both into the same backup folder
+# merged them, so UNDO would have copied the mixture back to both places.
 $folderTargets = @(
-    (Join-Path $commonFiles 'AdskLicensing'),
-    (Join-Path $commonFiles 'AdSSO'),
-    (Join-Path $commonFiles 'Network License Manager'),
-    (Join-Path $env:ProgramData 'FLEXnet'),
-    (Join-Path $env:ProgramData 'Autodesk\Adlm'),
-    'C:\Autodesk\Network License Manager'
+    @{ Src = (Join-Path $commonFiles 'AdskLicensing');                  Leaf = 'AdskLicensing' },
+    @{ Src = (Join-Path $commonFiles 'AdSSO');                          Leaf = 'AdSSO' },
+    @{ Src = (Join-Path $commonFiles 'Network License Manager');        Leaf = 'CommonFiles-NetworkLicenseManager' },
+    @{ Src = 'C:\Autodesk\Network License Manager';                     Leaf = 'Autodesk-NetworkLicenseManager' },
+    @{ Src = 'C:\FlexLM';                                               Leaf = 'FlexLM' },
+    @{ Src = (Join-Path $env:ProgramData 'FLEXnet');                    Leaf = 'FLEXnet' },
+    @{ Src = (Join-Path $env:ProgramData 'Autodesk\Adlm');              Leaf = 'Autodesk-Adlm' },
+    @{ Src = (Join-Path $env:ProgramData 'Autodesk\Web Services\Adlm'); Leaf = 'Autodesk-WebServices-Adlm' }
 )
-foreach ($src in $folderTargets) {
+foreach ($t in $folderTargets) {
+    $src = $t.Src
     if (-not (Test-Path -LiteralPath $src)) { continue }
-    $leaf = Split-Path -Leaf $src
-    $out  = Join-Path $filesDir $leaf
+    $out = Join-Path $filesDir $t.Leaf
     if (Copy-Tree -Source $src -DestPath $out) { Add-Item 'folder' $src $out 'ok'; Say ("  backed up: {0}" -f $src) 'Gray' }
     else { Add-Item 'folder' $src $out 'failed'; Say ("  FAILED: {0}" -f $src) 'Yellow' }
 }
+
+# Loose crack files that the clean-up deletes (adskflex.exe directly under
+# Common Files\Autodesk Shared, a patched copy or licence file in the product
+# tree): nothing captured them before, so UNDO could not bring the pre-clean
+# state back (seen in the lab run 2026-10-16). The pattern mirrors the
+# clean-up's own suspicious-name list.
+$suspName = 'crack|keygen|licgen|xforce|xf-|adskflex|lmgrd|_orig|patched|licpath|\.bak$'
+$loose = @()
+foreach ($root in @($commonFiles, (Join-Path $env:ProgramFiles 'Autodesk'))) {
+    if (-not (Test-Path -LiteralPath $root)) { continue }
+    $loose += @(Get-ChildItem -LiteralPath $root -Recurse -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -match $suspName } | Select-Object -First 50)
+}
+$li = 0
+foreach ($f in $loose) {
+    $li++
+    $out = Join-Path $filesDir ('loose-' + $li.ToString('00') + '-' + $f.Name)
+    try {
+        Copy-Item -LiteralPath $f.FullName -Destination $out -Force -ErrorAction Stop
+        Add-Item 'file' $f.FullName $out 'ok'
+    } catch { Add-Item 'file' $f.FullName '' 'failed' }
+}
+if ($loose.Count) { Say ("  loose crack files backed up: {0}" -f $loose.Count) 'Gray' }
 
 # ---------------------------------------------------------------------------
 # Layer 4: System state snapshots
@@ -188,6 +222,20 @@ try {
     Add-Item 'state' 'environment' $envOut 'ok'
 } catch { Add-Item 'state' 'environment' '' 'failed' }
 
+# Defender exclusions belong to the state the clean-up changes (a crack adds
+# them so its patched files are never scanned), so the exact list is captured
+# here and UNDO.ps1 adds it back.
+try {
+    $defOut = Join-Path $stateDir 'defender-exclusions.txt'
+    $mpNow = Get-MpPreference -ErrorAction Stop
+    $defLines = @()
+    foreach ($x in @($mpNow.ExclusionPath))      { if ($x) { $defLines += ('Path'      + [char]9 + $x) } }
+    foreach ($x in @($mpNow.ExclusionExtension)) { if ($x) { $defLines += ('Extension' + [char]9 + $x) } }
+    foreach ($x in @($mpNow.ExclusionProcess))   { if ($x) { $defLines += ('Process'   + [char]9 + $x) } }
+    Set-Content -LiteralPath $defOut -Value $defLines -Encoding UTF8
+    Add-Item 'state' 'defender-exclusions' $defOut 'ok'
+} catch { Add-Item 'state' 'defender-exclusions' '' 'failed' }
+
 # ---------------------------------------------------------------------------
 # Layer 5: UNDO script
 # ---------------------------------------------------------------------------
@@ -198,7 +246,7 @@ $regBlock = (@($script:Items | Where-Object { $_.Type -eq 'registry' -and $_.Sta
 $fileBlock = (@($script:Items | Where-Object { $_.Type -eq 'file' -and $_.Status -eq 'ok' } |
     ForEach-Object { 'Copy-Item -LiteralPath "{0}" -Destination "{1}" -Force' -f $_.Backup, $_.Source }) -join "`n")
 $folderBlock = (@($script:Items | Where-Object { $_.Type -eq 'folder' -and $_.Status -eq 'ok' } |
-    ForEach-Object { 'robocopy "{0}" "{1}" /E /R:1 /W:1 | Out-Null' -f $_.Backup, $_.Source }) -join "`n")
+    ForEach-Object { 'robocopy "{0}" "{1}" /E /R:1 /W:1 /XJ | Out-Null' -f $_.Backup, $_.Source }) -join "`n")
 
 $undo = @"
 <#
@@ -234,6 +282,22 @@ if (Test-Path -LiteralPath `$csv) {
 if (Test-Path -LiteralPath `$fw) {
     Write-Host 'Restoring firewall policy...' -ForegroundColor Cyan
     netsh advfirewall import `"`$fw`"
+}
+
+# Defender exclusions removed by the clean-up (a crack adds them to hide its
+# patched files) are added back from the snapshot taken before the clean-up.
+`$def = Join-Path `$PSScriptRoot 'state\defender-exclusions.txt'
+if (Test-Path -LiteralPath `$def) {
+    Write-Host 'Restoring Defender exclusions...' -ForegroundColor Cyan
+    foreach (`$ex in (Get-Content -LiteralPath `$def)) {
+        `$parts = `$ex -split '[\t]', 2
+        if (`$parts.Count -lt 2) { continue }
+        switch (`$parts[0]) {
+            'Path'      { Add-MpPreference -ExclusionPath `$parts[1] -ErrorAction SilentlyContinue }
+            'Extension' { Add-MpPreference -ExclusionExtension `$parts[1] -ErrorAction SilentlyContinue }
+            'Process'   { Add-MpPreference -ExclusionProcess `$parts[1] -ErrorAction SilentlyContinue }
+        }
+    }
 }
 
 Write-Host ''

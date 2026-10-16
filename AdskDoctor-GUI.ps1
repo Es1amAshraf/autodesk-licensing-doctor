@@ -260,6 +260,15 @@ function T { param([string]$k) $L[$script:lang][$k] }
 $reader = New-Object System.Xml.XmlNodeReader $xaml
 $win    = [System.Windows.Markup.XamlReader]::Load($reader)
 
+# The default height (690 DIP) is taller than the usable work area of a common
+# laptop at 125-150% scaling, which pushes the bottom action bar off-screen.
+# Clamp the window to the work area; the layout scrolls if it has to.
+try {
+    $wa = [System.Windows.SystemParameters]::WorkArea
+    if ($win.Height -gt $wa.Height) { $win.Height = [math]::Max($win.MinHeight, $wa.Height - 16) }
+    if ($win.Width  -gt $wa.Width)  { $win.Width  = [math]::Max($win.MinWidth,  $wa.Width  - 16) }
+} catch { }
+
 $LogoImage  = $win.FindName('LogoImage')
 $BrandText  = $win.FindName('BrandText')
 $SubTitle   = $win.FindName('SubTitle')

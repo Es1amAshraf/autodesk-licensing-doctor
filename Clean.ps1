@@ -5,8 +5,9 @@
     exact causes seen in the field:
       - old Network License Manager (adskflex/lmgrd)  -> blocks Revit/AutoCAD 2026+
       - FLEXlm license-server leftovers
-      - hosts hijacks + firewall blocks
-      - crack-scheduled tasks & startup entries
+      - hosts hijacks (incl. blocked time servers) + firewall blocks
+      - crack-scheduled tasks & startup entries (Run / RunOnce)
+      - Defender exclusions that hide patched files
       - execution blockers (IFEO Debugger keys on Autodesk services)
       - Autodesk installer cache (ODIS) -> "error while preparing installation"
       - suspicious environment variables
@@ -53,6 +54,64 @@ function Section { param([string]$t) Write-Host ''; Write-Host ("== {0} ==" -f $
 function Test-IsAdmin {
     $id = [Security.Principal.WindowsIdentity]::GetCurrent()
     (New-Object Security.Principal.WindowsPrincipal($id)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Get-ExeFromCommandLine {
+    param([string]$CommandLine)
+    if (-not $CommandLine) { return $null }
+    if ($CommandLine -match '^\s*"([^"]+\.exe)"') { return $matches[1] }
+    # An unquoted path may still contain spaces (C:\Program Files\Autodesk\
+    # Genuine Service\GenuineService.exe - a real Autodesk Run value): take
+    # everything up to the first .exe, not just the first space-free token.
+    if ($CommandLine -match '^\s*(.+?\.exe)\b')   { return $matches[1].Trim('"') }
+    return $null
+}
+
+# A path is crack-suspicious when it lives outside the normal program folders
+# or carries a known crack-tool name. The khale case runs C:\FlexLM\adskflex.exe
+# from a task, a Run value and a LICPATH variable, so the check has to cover
+# names, not just the user folders.
+function Test-SuspiciousExecPath {
+    param([string]$Path)
+    if (-not $Path) { return $false }
+    $p = $Path.ToLowerInvariant()
+    if ($p -match '\\appdata\\|\\temp\\|\\users\\|\\programdata\\|\\downloads\\') { return $true }
+    return [bool]($p -match 'flexlm|adskflex|lmgrd|lmutil|lmadmin|keygen|xf-adsk|xforce|crack|licgen')
+}
+
+# A FlexNet/FLEXlm-named service is crack tooling only when its binary is gone
+# or lives in a suspicious place. The genuine Flexera service
+# (FNPLicensingService64.exe under Program Files\Common Files\Macrovision
+# Shared, signed by Flexera) is infrastructure other software uses, and the lab
+# run wrongly deleted it because the name matched "flexnet" (2026-10-16).
+function Test-CrackFlexService {
+    param([string]$Name)
+    $svc = Get-CimInstance -ClassName Win32_Service -Filter ("Name='{0}'" -f $Name.Replace("'", "''")) -ErrorAction SilentlyContinue
+    if (-not $svc) { return $false }
+    $bin = Get-ExeFromCommandLine $svc.PathName
+    if (-not $bin) { return $true }                                  # no binary at all
+    return (Test-SuspiciousExecPath $bin) -or (-not (Test-Path -LiteralPath $bin))
+}
+
+# A startup target is only left alone when it is a real, intact binary. A dead
+# path, a patched file (HashMismatch), or an unsigned helper in the Autodesk
+# tree is exactly what an activator leaves behind, so those are removed.
+function Test-KeepStartupTarget {
+    param([string]$Path)
+    try { $status = [string](Get-AuthenticodeSignature -LiteralPath $Path -ErrorAction Stop).Status }
+    catch { return $true }   # the check itself failed - never remove on that
+    return -not ($status -in @('HashMismatch','NotSigned','UnknownError'))
+}
+
+# A hosts line is a hijack when it points an Autodesk domain somewhere local,
+# or when it blocks the Windows time servers (a crack does both).
+function Test-BadHostsLine {
+    param([string]$Line)
+    $c = ($Line -split '#')[0].Trim()
+    if (-not $c) { return $false }
+    if ($c -match 'autodesk|adsk|flexnet') { return $true }
+    return (($c -match '^\s*(0\.0\.0\.0|127\.0\.0\.1|::1)\s') -and
+            ($c -match 'time\.windows\.com|time\.nist\.gov|pool\.ntp\.org|time\.autodesk\.com|w32time'))
 }
 
 # ---------------------------------------------------------------------------
@@ -121,10 +180,19 @@ if ($procs.Count -eq 0) {
 # 2. Stop Autodesk / FlexNet services
 # ---------------------------------------------------------------------------
 Section 'Stop Autodesk / FlexNet services'
-$svcs = @(Get-Service | Where-Object { $_.Name -match 'adsk|autodesk|flexnet|flexlm' -and $_.Name -notmatch 'AdskDoctor' })
+$script:svcStopped = @()
+$script:svcDeleted = @()
+$svcs = @(Get-Service | Where-Object {
+    $_.Name -notmatch 'AdskDoctor' -and
+    ($_.Name -match 'adsk|autodesk' -or
+     (($_.Name -match 'flexnet|flexlm') -and (Test-CrackFlexService $_.Name))) })
 foreach ($s in $svcs) {
-    if ($s.Status -eq 'Running') { Step ("Stop service {0}" -f $s.Name) { Stop-Service -Name $s.Name -Force } }
+    if ($s.Status -eq 'Running') {
+        $sn = $s.Name
+        Step ("Stop service {0}" -f $sn) { Stop-Service -Name $sn -Force; $script:svcStopped += $sn }
+    }
 }
+if ($svcs.Count -eq 0) { Write-Host '  none' -ForegroundColor DarkGray }
 
 # ---------------------------------------------------------------------------
 # 3. Hosts file hijacks
@@ -132,13 +200,23 @@ foreach ($s in $svcs) {
 Section 'Hosts file'
 $hostsPath = Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
 $hostsLines = Get-Content -LiteralPath $hostsPath -ErrorAction SilentlyContinue
-$bad = @($hostsLines | Where-Object { ($_ -split '#')[0].Trim() -match 'autodesk|adsk|flexnet' })
+$bad = @($hostsLines | Where-Object { Test-BadHostsLine $_ })
 if ($bad.Count -eq 0) {
     Write-Host '  clean' -ForegroundColor DarkGray
 } else {
-    Step ("Remove {0} Autodesk line(s) from hosts" -f $bad.Count) {
-        $keep = @($hostsLines | Where-Object { -not (($_ -split '#')[0].Trim() -match 'autodesk|adsk|flexnet') })
-        Set-Content -LiteralPath $hostsPath -Value $keep -Encoding ASCII
+    Step ("Remove {0} hijacked line(s) from hosts (Autodesk + time servers)" -f $bad.Count) {
+        $keep = @($hostsLines | Where-Object { -not (Test-BadHostsLine $_) })
+        # The hosts file is a favourite target of real-time antivirus scans and
+        # brief locks have been seen on real machines - retry, then verify.
+        $ok = $false
+        for ($attempt = 1; $attempt -le 3 -and -not $ok; $attempt++) {
+            try {
+                Set-Content -LiteralPath $hostsPath -Value $keep -Encoding ASCII -ErrorAction Stop
+                $stillBad = @(Get-Content -LiteralPath $hostsPath -ErrorAction SilentlyContinue | Where-Object { Test-BadHostsLine $_ }).Count
+                $ok = ($stillBad -eq 0)
+            } catch { Start-Sleep -Milliseconds 500 }
+        }
+        if (-not $ok) { throw 'the hosts file stayed locked and could not be cleaned - pause the antivirus and re-run' }
     }
 }
 
@@ -161,7 +239,7 @@ try {
     foreach ($t in $tasks) {
         $exe = $null
         foreach ($a in $t.Actions) { if ($a.Execute) { $exe = $a.Execute; break } }
-        $susp = ($exe -and $exe -match '\\appdata\\|\\temp\\|\\users\\|\\programdata\\|\\downloads\\')
+        $susp = Test-SuspiciousExecPath $exe
         if ($susp) {
             $tn = $t.TaskName; $tp = $t.TaskPath
             Step ("Unregister suspicious task {0}{1} ({2})" -f $tp, $tn, $exe) { Unregister-ScheduledTask -TaskName $tn -TaskPath $tp -Confirm:$false }
@@ -171,7 +249,69 @@ try {
 } catch {}
 
 # ---------------------------------------------------------------------------
-# 6. Crack leftovers / fake license server
+# 6. Startup entries (Run / RunOnce) dropped by cracks
+# ---------------------------------------------------------------------------
+Section 'Startup entries'
+$runKeys = @(
+    'Registry::HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run',
+    'Registry::HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce',
+    'Registry::HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run',
+    'Registry::HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\RunOnce',
+    'Registry::HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run',
+    'Registry::HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce'
+)
+$startupFound = $false
+foreach ($rk in $runKeys) {
+    if (-not (Test-Path -LiteralPath $rk)) { continue }
+    $item = Get-Item -LiteralPath $rk
+    foreach ($vn in @($item.GetValueNames())) {
+        if (-not $vn) { continue }
+        $val = [string]$item.GetValue($vn)
+        if ($vn -notmatch 'autodesk|adsk|flexnet|flexlm|acad|revit|licgen|xforce|xf-' -and
+            $val -notmatch 'autodesk|adsk|flexnet|flexlm|acad|revit|licgen|xforce|xf-') { continue }
+        $startupFound = $true
+        # A genuine entry starts a Program Files binary that is still intact.
+        # Anything else is a leftover: an activator in a user/temp folder, a
+        # patched binary, or a dead path.
+        $exe = Get-ExeFromCommandLine $val
+        $keep = $false
+        if ($exe -and (Test-Path -LiteralPath $exe) -and -not (Test-SuspiciousExecPath $val)) {
+            $keep = Test-KeepStartupTarget $exe
+        }
+        if ($keep) {
+            Write-Host ("  note: startup entry looks genuine (left alone): {0} = {1}" -f $vn, $val) -ForegroundColor DarkGray
+        } else {
+            $rkn = $vn; $rkp = $rk
+            Step ("Remove startup entry {0} ({1} = {2})" -f $rk.Replace('Registry::',''), $vn, $val) { Remove-ItemProperty -LiteralPath $rkp -Name $rkn -Force }
+        }
+    }
+}
+if (-not $startupFound) { Write-Host '  none' -ForegroundColor DarkGray }
+
+# ---------------------------------------------------------------------------
+# 7. Defender exclusions that hide patched files
+# ---------------------------------------------------------------------------
+Section 'Defender exclusions'
+try {
+    $mp = Get-MpPreference -ErrorAction Stop
+    $exPaths = @(@($mp.ExclusionPath)    | Where-Object { $_ })
+    $exProcs = @(@($mp.ExclusionProcess) | Where-Object { $_ })
+    $crackPaths = @($exPaths | Where-Object { $_ -match 'flexlm|adskflex|lmgrd|licgen|xforce|xf-|crack|keygen|\\temp\\|\\downloads\\|\\appdata\\' })
+    $adskPaths  = @($exPaths | Where-Object { $_ -match 'autodesk|adsk' -and $_ -notmatch 'flexlm|adskflex|lmgrd|licgen|xforce|xf-|crack|keygen|\\temp\\|\\downloads\\|\\appdata\\' })
+    $crackProcs = @($exProcs | Where-Object { $_ -match 'flexlm|adskflex|lmgrd|licgen|xforce|xf-|crack|keygen' })
+    if (($crackPaths.Count + $adskPaths.Count + $crackProcs.Count) -eq 0) {
+        Write-Host '  none' -ForegroundColor DarkGray
+    }
+    foreach ($p in $crackPaths) { $pp = $p; Step ("Remove Defender exclusion (crack-related): {0}" -f $pp) { Remove-MpPreference -ExclusionPath $pp } }
+    foreach ($p in $adskPaths)  { $pp = $p; Step ("Remove Defender exclusion (hides patched files): {0}" -f $pp) { Remove-MpPreference -ExclusionPath $pp } }
+    foreach ($p in $crackProcs) { $pp = $p; Step ("Remove Defender process exclusion: {0}" -f $pp) { Remove-MpPreference -ExclusionProcess $pp } }
+    if (($crackPaths.Count + $adskPaths.Count + $crackProcs.Count) -gt 0) {
+        Write-Host '  (removed exclusions are re-scanned; UNDO.ps1 adds them back)' -ForegroundColor DarkGray
+    }
+} catch { Write-Host ('  (Defender query failed: ' + $_.Exception.Message + ')') -ForegroundColor DarkGray }
+
+# ---------------------------------------------------------------------------
+# 8. Crack leftovers / fake license server
 # ---------------------------------------------------------------------------
 Section 'Crack leftovers'
 $leftovers = @()
@@ -186,7 +326,7 @@ foreach ($p in @(
 }
 foreach ($p in $leftovers) { $pp = $p; Step ("Remove leftover folder {0}" -f $p) { Remove-Item -LiteralPath $pp -Recurse -Force } }
 
-$suspName = 'crack|keygen|licgen|xforce|xf-|adskflex|lmgrd|_orig|\.bak$'
+$suspName = 'crack|keygen|licgen|xforce|xf-|adskflex|lmgrd|_orig|patched|licpath|\.bak$'
 $commonFiles = Join-Path ${env:ProgramFiles(x86)} 'Common Files\Autodesk Shared'
 foreach ($root in @($commonFiles, (Join-Path $env:ProgramFiles 'Autodesk'))) {
     if (-not (Test-Path -LiteralPath $root)) { continue }
@@ -196,7 +336,7 @@ foreach ($root in @($commonFiles, (Join-Path $env:ProgramFiles 'Autodesk'))) {
 if ($leftovers.Count -eq 0) { Write-Host '  no leftover folders' -ForegroundColor DarkGray }
 
 # ---------------------------------------------------------------------------
-# 7. Network License Manager (blocks 2026 products)
+# 9. Network License Manager (blocks 2026 products)
 # ---------------------------------------------------------------------------
 Section 'Network License Manager (NLM)'
 if ($KeepNLM) {
@@ -206,6 +346,8 @@ if ($KeepNLM) {
         (Join-Path ${env:ProgramFiles(x86)} 'Common Files\Autodesk Shared\Network License Manager'),
         (Join-Path $env:ProgramFiles 'Common Files\Autodesk Shared\Network License Manager'),
         'C:\Autodesk\Network License Manager',
+        # the classic crack drop for a fake FLEXlm server (backed up first)
+        'C:\FlexLM',
         (Join-Path $env:ProgramFiles 'Autodesk\Network License Manager'),
         (Join-Path ${env:ProgramFiles(x86)} 'Autodesk\Network License Manager')
     )
@@ -220,14 +362,18 @@ if ($KeepNLM) {
     # FlexNet / NLM services. The Autodesk Network License Manager service is
     # called AdskNLM and its display name does not contain "Network License
     # Manager", so it survived an earlier cleanup as a service pointing at
-    # deleted binaries (seen on a customer machine).
+    # deleted binaries (seen on a customer machine). A flexnet/flexlm-named
+    # service is removed only when it is dead or suspicious: the genuine
+    # Flexera service is infrastructure other software may need.
     foreach ($s in @(Get-Service | Where-Object {
-            $_.Name -match 'flexnet|flexlm|adsknlm' -or
-            $_.DisplayName -match 'Network License Manager|AdskNLM' })) {
+            $_.Name -match 'adsknlm' -or
+            $_.DisplayName -match 'Network License Manager|AdskNLM' -or
+            (($_.Name -match 'flexnet|flexlm') -and (Test-CrackFlexService $_.Name)) })) {
         $sn = $s.Name
         Step ("Remove NLM/FlexNet service {0}" -f $sn) {
             Stop-Service -Name $sn -Force -ErrorAction SilentlyContinue
             & sc.exe delete $sn | Out-Null
+            $script:svcDeleted += $sn
         }
         $nlmFound = $true
     }
@@ -235,7 +381,7 @@ if ($KeepNLM) {
 }
 
 # ---------------------------------------------------------------------------
-# 8. Registry: cracked license-server keys
+# 10. Registry: cracked license-server keys
 # ---------------------------------------------------------------------------
 Section 'Registry artifacts'
 $regKeys = @(
@@ -277,21 +423,35 @@ foreach ($ir in $ifeoRoots) {
 if (-not $ifeoFound) { Write-Host '  no Autodesk execution blockers' -ForegroundColor DarkGray }
 
 # ---------------------------------------------------------------------------
-# 9. Autodesk installer cache (ODIS)
+# 11. Autodesk installer cache (ODIS)
 # ---------------------------------------------------------------------------
 Section 'Installer cache (ODIS)'
+$script:odisLocked = $false
 foreach ($odis in @(
     (Join-Path $env:ProgramData 'Autodesk\ODIS'),
     (Join-Path $env:LOCALAPPDATA 'Autodesk\ODIS'))) {
     if (Test-Path -LiteralPath $odis) {
         $oo = $odis
-        Step ("Clear installer cache {0}" -f $odis) { Remove-Item -LiteralPath $oo -Recurse -Force }
+        Step ("Clear installer cache {0}" -f $odis) {
+            # the cache database can still be locked while an Autodesk process
+            # is shutting down: clear everything that is free and leave the
+            # rest to the reboot instead of throwing raw Remove-Item errors
+            # (seen in the lab run)
+            Get-ChildItem -LiteralPath $oo -Recurse -File -ErrorAction SilentlyContinue |
+                Remove-Item -Force -ErrorAction SilentlyContinue
+            Get-ChildItem -LiteralPath $oo -Recurse -Directory -ErrorAction SilentlyContinue |
+                Sort-Object FullName -Descending |
+                Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $oo -Recurse -Force -ErrorAction SilentlyContinue
+            if (Test-Path -LiteralPath $oo) { $script:odisLocked = $true }
+        }
     }
 }
+if ($script:odisLocked) { Write-Host '  note: some cache files are locked by a running Autodesk process - they clear after reboot' -ForegroundColor DarkGray }
 Write-Host '  (cleared caches are regenerated automatically)' -ForegroundColor DarkGray
 
 # ---------------------------------------------------------------------------
-# 10. Suspicious environment variables
+# 12. Suspicious environment variables
 # ---------------------------------------------------------------------------
 Section 'Environment variables'
 $hv = @()
@@ -305,7 +465,7 @@ foreach ($v in $hv) { $vn = $v.Name; $vs = $v.Scope; Step ("Remove env var {0}:{
 if ($hv.Count -eq 0) { Write-Host '  none' -ForegroundColor DarkGray }
 
 # ---------------------------------------------------------------------------
-# 11. System clock (fixes "Clock Error")
+# 13. System clock (fixes "Clock Error")
 # ---------------------------------------------------------------------------
 Section 'System clock'
 Step 'Enable + start Windows Time service (w32time)' {
@@ -313,6 +473,19 @@ Step 'Enable + start Windows Time service (w32time)' {
     Start-Service -Name w32time -ErrorAction SilentlyContinue
 }
 Step 'Resync system clock with internet time' { & w32tm /resync /force *> $null }
+
+# ---------------------------------------------------------------------------
+# 14. Put back the services that were only stopped
+# ---------------------------------------------------------------------------
+Section 'Restart services that were only stopped'
+$script:restarted = 0
+foreach ($sn in $script:svcStopped) {
+    if ($script:svcDeleted -contains $sn) { continue }
+    $sv = Get-Service -Name $sn -ErrorAction SilentlyContinue
+    if (-not $sv -or $sv.StartType -eq 'Disabled') { continue }
+    Step ("Start service {0}" -f $sn) { Start-Service -Name $sn; $script:restarted += 1 }
+}
+if ($script:restarted -eq 0) { Write-Host '  none' -ForegroundColor DarkGray }
 
 # ---------------------------------------------------------------------------
 # Summary

@@ -102,7 +102,10 @@ function Get-ExeFromCommandLine {
     param([string]$CommandLine)
     if (-not $CommandLine) { return $null }
     if ($CommandLine -match '^\s*"([^"]+\.exe)"') { return $matches[1] }
-    if ($CommandLine -match '^\s*([^\s]+\.exe)')   { return $matches[1] }
+    # An unquoted path may still contain spaces (C:\Program Files\Autodesk\
+    # Genuine Service\GenuineService.exe - a real Autodesk Run value): take
+    # everything up to the first .exe, not just the first space-free token.
+    if ($CommandLine -match '^\s*(.+?\.exe)\b')   { return $matches[1].Trim('"') }
     return $null
 }
 
@@ -110,8 +113,15 @@ function Get-ExeFromCommandLine {
 function Get-PathSuspicion {
     param([string]$Path)
     if (-not $Path) { return $null }
-    $p = $Path.ToLowerInvariant()
+    $p = $Path.ToLowerInvariant().Trim()
+    if ($p.StartsWith('"')) { $p = $p.Substring(1) }
     if ($p -match '\\appdata\\|\\temp\\|\\users\\|\\downloads\\') { return 'BAD' }
+    # classic crack tooling: a local FlexLM server folder, patched copies, keygens
+    if ($p -match 'flexlm|adskflex|lmgrd|lmutil|lmadmin|keygen|xf-adsk|xforce|crack') { return 'BAD' }
+    if ($p -match '\.lic["\s]?$') { return 'BAD' }
+    # an Autodesk-related entry whose binary lives outside the usual install
+    # roots is at least worth a look (a product installed on D:\ lands here)
+    if ($p -match '\.exe' -and $p -notmatch '^[a-z]:\\program files|^[a-z]:\\program files \(x86\)|^[a-z]:\\windows|^%programfiles%|^%programfiles\(x86\)%|^%windir%|^%systemroot%') { return 'WARN' }
     if ($p -match '\\programdata\\') { return 'WARN' }
     return $null
 }
@@ -178,10 +188,25 @@ $script:SignatureExtensions = @(
     '.exe','.dll','.sys','.ocx','.cpl','.msi','.msp','.drv','.ax','.scr','.com'
 )
 
+# Windows PowerShell 5.1 Get-ChildItem -Recurse walks through junctions: a file
+# behind AdskLicensing\Current was counted once through the junction and once in
+# the real build folder (the lab run reported "2 unsigned" for a single dummy).
+# Walk the tree by hand and leave junctions alone.
+function Get-TreeFilesQuiet {
+    param([string]$Path)
+    $out = New-Object System.Collections.ArrayList
+    foreach ($d in @(Get-ChildItem -LiteralPath $Path -Directory -ErrorAction SilentlyContinue)) {
+        if ($d.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { continue }
+        foreach ($f in @(Get-TreeFilesQuiet -Path $d.FullName)) { [void]$out.Add($f) }
+    }
+    foreach ($f in @(Get-ChildItem -LiteralPath $Path -File -ErrorAction SilentlyContinue)) { [void]$out.Add($f) }
+    return @($out)
+}
+
 function Scan-FolderSignatures {
     param([string]$Root, [string]$Tag, [switch]$Strict)
     if (-not (Test-Path -LiteralPath $Root)) { return }
-    $files = @(Get-ChildItem -LiteralPath $Root -Recurse -File -ErrorAction SilentlyContinue |
+    $files = @(Get-TreeFilesQuiet -Path $Root |
                Where-Object { $script:SignatureExtensions -contains $_.Extension.ToLowerInvariant() })
     $checked  = 0
     $bad      = 0
@@ -303,7 +328,11 @@ if ($netTime) {
 # time servers blocked in hosts (a common crack side-effect)
 try {
     $hostsRaw = Get-Content -LiteralPath (Join-Path $env:SystemRoot 'System32\drivers\etc\hosts') -ErrorAction SilentlyContinue
-    $timeBlock = @($hostsRaw | Where-Object { $_ -match 'time\.windows|ntp|time\.autodesk' -and $_ -notmatch '^\s*#' })
+    $timeBlock = @($hostsRaw | Where-Object {
+        $c = ($_ -split '#')[0].Trim()
+        $c -match '^\s*(0\.0\.0\.0|127\.0\.0\.1|::1)\s' -and
+        $c -match 'time\.windows\.com|time\.nist\.gov|pool\.ntp\.org|time\.autodesk\.com|w32time'
+    })
     if ($timeBlock.Count -gt 0) { Add-Finding WARN 'Clock' 'Time servers are blocked in the hosts file' ($timeBlock -join ' ; ') }
 } catch {}
 
@@ -593,10 +622,16 @@ if ($wv2.Count) {
 # --- identity component -----------------------------------------------------
 # 2020+ products sign in through Autodesk Identity Manager, which is a separate
 # component from ADLS. Without it the sign-in flow cannot complete.
+# the official installer puts the exe either straight inside the folder or
+# one level down in a version folder (e.g. ...\AdskIdentityManager\1.19.2.0\)
 $idm = @(
-    (Join-Path $env:ProgramFiles 'Autodesk\AdskIdentityManager\AdskIdentityManager.exe'),
-    (Join-Path ${env:ProgramFiles(x86)} 'Autodesk\AdskIdentityManager\AdskIdentityManager.exe')
-) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+    (Join-Path $env:ProgramFiles 'Autodesk\AdskIdentityManager'),
+    (Join-Path ${env:ProgramFiles(x86)} 'Autodesk\AdskIdentityManager')
+) | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object {
+    Join-Path $_ 'AdskIdentityManager.exe'
+    Get-ChildItem -LiteralPath $_ -Directory -ErrorAction SilentlyContinue |
+        ForEach-Object { Join-Path $_.FullName 'AdskIdentityManager.exe' }
+} | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 if ($idm) {
     Add-Finding OK 'Licensing' ('Identity component present (version {0})' -f (Get-Item -LiteralPath $idm).VersionInfo.FileVersion) $idm
 } elseif ($adskInstalled) {
@@ -696,6 +731,27 @@ try {
         Add-Finding WARN 'Antivirus' 'Windows Defender Controlled Folder Access is ON - it can block Autodesk installs' ''
     } else {
         Add-Finding OK 'Antivirus' 'Defender Controlled Folder Access is off'
+    }
+
+    # Exclusions are how a crack keeps its patched files invisible to Defender:
+    # the FLEXlm folder, a temp folder the activator runs from, or the whole
+    # Autodesk tree the patched binaries were dropped into.
+    $exPaths = @(@($mp.ExclusionPath)    | Where-Object { $_ })
+    $exProcs = @(@($mp.ExclusionProcess) | Where-Object { $_ })
+    $crackPaths = @($exPaths | Where-Object { $_ -match 'flexlm|adskflex|lmgrd|licgen|xforce|xf-|crack|keygen|\\temp\\|\\downloads\\|\\appdata\\' })
+    $adskPaths  = @($exPaths | Where-Object { $_ -match 'autodesk|adsk' -and $_ -notmatch 'flexlm|adskflex|lmgrd|licgen|xforce|xf-|crack|keygen|\\temp\\|\\downloads\\|\\appdata\\' })
+    $crackProcs = @($exProcs | Where-Object { $_ -match 'flexlm|adskflex|lmgrd|licgen|xforce|xf-|crack|keygen' })
+    if ($crackPaths.Count -gt 0) {
+        Add-Finding BAD 'Antivirus' ("Defender excludes {0} crack-related path(s)" -f $crackPaths.Count) ($crackPaths -join ' ; ')
+    }
+    if ($crackProcs.Count -gt 0) {
+        Add-Finding BAD 'Antivirus' ("Defender excludes {0} crack-related process(es)" -f $crackProcs.Count) ($crackProcs -join ' ; ')
+    }
+    if ($adskPaths.Count -gt 0) {
+        Add-Finding WARN 'Antivirus' ("Defender excludes {0} Autodesk folder(s) - patched files can hide there" -f $adskPaths.Count) ($adskPaths -join ' ; ')
+    }
+    if (($crackPaths.Count + $crackProcs.Count + $adskPaths.Count) -eq 0) {
+        Add-Finding OK 'Antivirus' 'No Autodesk/crack-related Defender exclusions'
     }
 } catch { Add-Finding INFO 'Antivirus' 'Could not query Defender settings' '' }
 
@@ -798,8 +854,19 @@ Write-Section 'Crack leftovers'
 $flexnet = Join-Path $env:ProgramData 'FLEXnet'
 if (Test-Path -LiteralPath $flexnet) {
     $fn = @(Get-ChildItem -LiteralPath $flexnet -Force)
-    Add-Finding WARN 'Leftovers' ("ProgramData\FLEXnet present ({0} items) - fake license-server leftovers?" -f $fn.Count) $flexnet
+    if ($fn.Count -gt 0) {
+        Add-Finding WARN 'Leftovers' ("ProgramData\FLEXnet present ({0} items) - fake license-server leftovers?" -f $fn.Count) $flexnet
+    } else {
+        # an empty folder is created by the official FlexNet service install
+        Add-Finding OK 'Leftovers' 'ProgramData\FLEXnet folder is empty (benign - the official FlexNet service creates it)' $flexnet
+    }
 } else { Add-Finding OK 'Leftovers' 'No ProgramData\FLEXnet leftovers' }
+
+$flexlmDir = 'C:\FlexLM'
+if (Test-Path -LiteralPath $flexlmDir) {
+    $fn2 = @(Get-ChildItem -LiteralPath $flexlmDir -File -Force -ErrorAction SilentlyContinue)
+    Add-Finding WARN 'Leftovers' ("C:\FlexLM present ({0} files) - classic crack license-server folder" -f $fn2.Count) $flexlmDir
+}
 
 foreach ($path in @(
     (Join-Path $env:ProgramData 'Autodesk\CLM\LGS'),
@@ -811,9 +878,10 @@ foreach ($path in @(
 
 # The legacy ADLM licence cache. A patched ProductInformation.pit is one of the
 # classic non-genuine activation leftovers, and ADLS ignores the file, so the
-# Cleanup step resets it (the backup restores it if you roll back). Only the
-# known cache locations are searched: a recursive sweep of all of ProgramData
-# could take minutes on a busy machine.
+# Cleanup step resets it (the backup restores it if you roll back). Presence
+# alone is normal on genuine installs, so it is reported as INFO only. Only
+# the known cache locations are searched: a recursive sweep of all of
+# ProgramData could take minutes on a busy machine.
 $pit = @()
 foreach ($loc in @(
     (Join-Path $env:ProgramData 'Autodesk\Adlm'),
@@ -823,10 +891,10 @@ foreach ($loc in @(
         $pit += @(Get-ChildItem -LiteralPath $loc -Filter 'ProductInformation.pit' -Recurse -File -ErrorAction SilentlyContinue)
     }
 }
-foreach ($f in @($pit | Select-Object -First 5)) { Add-Finding WARN 'Leftovers' ('ProductInformation.pit - legacy licence cache (the Cleanup step resets it) - ' + $f.LastWriteTime) $f.FullName }
+foreach ($f in @($pit | Select-Object -First 5)) { Add-Finding INFO 'Leftovers' ('ProductInformation.pit - legacy licence cache (the Cleanup step resets it) - ' + $f.LastWriteTime) $f.FullName }
 
 # suspicious file names inside Autodesk trees
-$suspName = 'crack|keygen|licgen|xforce|xf-|adskflex|lmgrd|_orig|\.bak$|\.old$'
+$suspName = 'crack|keygen|licgen|xforce|xf-|adskflex|lmgrd|_orig|patched|licpath|\.bak$|\.old$'
 foreach ($root in @($commonFiles, $productRoot)) {
     if (Test-Path -LiteralPath $root) {
         $hits = @(Get-ChildItem -LiteralPath $root -Recurse -File -ErrorAction SilentlyContinue |
@@ -915,17 +983,23 @@ if (-not (Test-Path -LiteralPath 'HKLM:\SOFTWARE\FLEXlm License Manager') -and
 # 8. Environment variables
 # ===========================================================================
 Write-Section 'Environment variables'
-$envHit = @()
+$envHits = 0
 foreach ($scope in @(@{n='Machine';d=[Environment]::GetEnvironmentVariables('Machine')},
                      @{n='User';d=[Environment]::GetEnvironmentVariables('User')})) {
     foreach ($k in $scope.d.Keys) {
         if ($k -match 'ADSK|AUTODESK|FLEXLM|LICPATH') {
-            $envHit += ("{0}:{1}={2}" -f $scope.n, $k, $scope.d[$k])
+            $envHits++
+            $val  = [string]$scope.d[$k]
+            $sev  = 'INFO'
+            $note = ''
+            $susp = Get-PathSuspicion $val
+            if ($susp) { $sev = $susp; $note = ' (suspicious path)' }
+            elseif ($k -match 'LICPATH') { $sev = 'WARN'; $note = ' - legacy network-licence pointer, unused by single-user sign-in' }
+            Add-Finding $sev 'Environment' ("Env var {0}:{1} = {2}{3}" -f $scope.n, $k, $val, $note) ''
         }
     }
 }
-if ($envHit.Count -gt 0) { Add-Finding INFO 'Env' ('Autodesk env vars: ' + $envHit.Count) ($envHit -join ' ; ') }
-else { Add-Finding OK 'Env' 'No suspicious Autodesk environment variables' }
+if ($envHits -eq 0) { Add-Finding OK 'Environment' 'No suspicious Autodesk environment variables' }
 
 # ===========================================================================
 # 9. Scheduled tasks (by name AND by action target)
@@ -959,8 +1033,11 @@ try {
 Write-Section 'Startup entries'
 $runKeys = @(
     'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run',
+    'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce',
     'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run',
-    'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\RunOnce',
+    'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run',
+    'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce'
 )
 $startupHit = $false
 foreach ($rk in $runKeys) {

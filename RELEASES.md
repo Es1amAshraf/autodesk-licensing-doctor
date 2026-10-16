@@ -1,5 +1,111 @@
 ﻿# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases
 
+## v1.2.9  (2026-10-16 06:43:37)
+
+Field hardening from a real end-to-end run.
+
+Every change in this release comes from installing AutoCAD 2024 officially in a
+lab VM, planting the leftovers of a common FLEXlm-style activator (a fake
+license server in `C:\FlexLM` started by a scheduled task and Run/RunOnce
+entries, blocked Windows time servers, Defender exclusions hiding patched
+files, and the licensing service's `Current` junction re-pointed at a doctored
+old build), then cleaning and repairing the machine with the toolkit until the
+diagnostic reported zero faults.
+
+**Diagnostic**
+
+- The path classifier now flags FLEXlm-style crack paths wherever they appear
+  (`flexlm` / `adskflex` / `lmgrd` / `lmutil` / `lmadmin` / `keygen` /
+  `xf-adsk` / `xforce` / `crack` / `*.lic`) and warns about Autodesk entries
+  whose binary lives outside the usual install roots instead of listing them as
+  plain information.
+- Defender exclusions are checked: exclusions naming crack paths or processes
+  are reported as faults (they keep patched files invisible), excluded
+  Autodesk folders as a warning.
+- Startup entries cover RunOnce beside Run, in both registry views.
+- The identity component is found when its installer puts it in a version
+  subfolder (`...\AdskIdentityManager\1.19.2.0\`), an empty
+  `ProgramData\FLEXnet` folder is no longer treated as a leftover (the official
+  FlexNet service creates it), and the legacy `ProductInformation.pit` cache is
+  information, not a fault.
+- Run values with unquoted spaces now resolve to their `.exe`, so the genuine
+  "Autodesk Genuine Service" entry is kept.
+- The signature scan walks the licensing folders by hand and does not follow
+  junctions, so a binary behind `AdskLicensing\Current` is counted once instead
+  of twice.
+
+**Clean-up**
+
+- Removes the crack startup entries (Run / RunOnce) while keeping genuine
+  entries whose binary is still signed and intact.
+- Removes the Defender exclusions a crack added to hide its patched files.
+- Removes hosts lines that block the Windows time servers as well as the
+  Autodesk hijacks, retries the write when antivirus locks the file, and fails
+  loudly instead of leaving the file half-written.
+- Matches scheduled tasks by action path with the same classifier, so a task
+  starting `C:\FlexLM\adskflex.exe` is removed.
+- `C:\FlexLM` itself joins the folders the Network License Manager sweep
+  removes.
+- A `flexnet`/`flexlm` service is removed only when its binary is missing or
+  lives in a suspicious place: the genuine Flexera service
+  (`FNPLicensingService64.exe`, signed by Flexera, needed by other software) is
+  left running - the lab run used to delete it over its name.
+- Services that were only stopped (Autodesk Access, licensing) are started
+  again when the clean-up ends.
+- The installer-cache clear stays quiet when a shutting-down Autodesk process
+  still locks its database; the files clear on the recommended reboot.
+
+**Backup / rollback**
+
+- RunOnce keys are exported with Run; `C:\FlexLM`, `ProgramData\FLEXnet` and
+  the `Web Services\Adlm` cache are copied; Defender exclusions are
+  snapshotted, and UNDO.ps1 restores each of them.
+- Backup folders now carry a unique name per source (two different "Network
+  License Manager" folders used to merge into one, so a rollback could copy the
+  mixture into both locations).
+- The clean-up's loose crack files (`adskflex.exe` under Common Files,
+  `_orig` / `.bak` / `licpath` / `patched` copies in the product tree) are
+  captured too, so UNDO can put the exact pre-clean state back.
+- Backups and restores never follow the licensing `Current` junction
+  (robocopy `/XJ`): the doctored build behind it used to be stored as a real
+  folder and rolled back into the genuine build.
+
+**Repair**
+
+- When the licensing service's `Current` junction points at a doctored old
+  build, it is pointed back at the newest genuine build on the disk, and build
+  folders holding no signed Autodesk binary (the usual activator stub) are
+  removed. This was the last fault standing after the clean-up in the lab run.
+- A component that is already present is skipped instead of reinstalled, and
+  the whole installer scan is skipped when everything is present: the lab
+  repair used to run for twenty minutes over a full product image and ended
+  stuck on the Edge WebView2 bootstrapper.
+- Installers now run with a twenty-minute ceiling and are killed if they do
+  not exit, so a hanging installer can never hold the repair.
+- The licensing service is installed with its official unattended parameters
+  (`--mode unattended --unattendedmodeui none`, from the package manifest), and
+  the copy inside a product image (`x86\Licensing\AdskLicensing-installer.exe`)
+  is found as well.
+- The sign-in window profile reset also catches a renamed stale profile
+  (`EBWebView.broken`), and the identity-manager verification knows the version
+  subfolder layout.
+
+**Interface**
+
+- The window is clamped to the desktop work area, so the bottom action bar
+  survives a laptop screen at 125-150% display scaling.
+
+Unchanged promises: everything is read-only until `-Apply`, a layered backup
+and an UNDO script are taken first, nothing is ever downloaded, and only the
+official installers you point it at are installed.
+
+Tests: 45 Pester tests in CI.
+
+
+- `AdskDoctor-v1.2.9-Project.zip`  -  0.14 MB  -  SHA256 `093ED745E0A488F517AB3D005062E13663EEAECA677C81679CA7A2AEF6F0CB05`
+- `AdskDoctor-v1.2.9-Portable.zip`  -  0.15 MB  -  SHA256 `6071B0F86426DABB18901408CEEBEFC2C3E58815EE3724B09BD4025D9500690E`
+- `UNLOCK-DIGITAL-AdskDoctor-Setup-1.2.9.exe`  -  2.11 MB  -  SHA256 `EDB8E0EACB9F0D8E9DB6AD07C1EADBD53C640D15CD4047590E7381369274E053`
+
 ## v1.2.8  (2026-10-15 22:41:17)
 
 The action panel now fits the window it opens in.

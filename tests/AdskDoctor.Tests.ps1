@@ -236,6 +236,16 @@ Describe 'Regression guards' {
         $clean | Should -Match 'adsknlm'
     }
 
+    It 'keeps a genuine Flexera service and removes only dead or suspicious FlexNet ones' {
+        # the lab run deleted FNPLicensingService64.exe (Flexera-signed, under
+        # Program Files\Common Files\Macrovision Shared) because the service
+        # name matched "flexnet". Only a missing binary or a suspicious path is
+        # crack tooling - a signed vendor binary in Program Files is genuine.
+        $clean = Get-Content -LiteralPath (Join-Path $script:Root 'Clean.ps1') -Raw
+        $clean | Should -Match 'Test-CrackFlexService'
+        $clean | Should -Match 'Macrovision'
+    }
+
     It 'does not treat its own process as a suspicious Autodesk process' {
         # "UNLOCK-DIGITAL-AdskDoctor" matches the "adsk" pattern and the portable
         # build runs from a user profile, so the toolkit reported itself as FAIL.
@@ -344,5 +354,158 @@ Describe 'Regression guards' {
             Should -Be 3 -Because 'project, portable and installer payload all need it'
         @([regex]::Matches($build, [regex]::Escape("Copy-Item (Join-Path `$root 'README.md')"))).Count |
             Should -Be 0 -Because 'the root README keeps the hash block for the repo only'
+    }
+}
+
+Describe 'Field-gap guards' {
+    # Gaps found by comparing a real non-genuine install with the toolkit: the
+    # RunOnce keys, the blocked time servers and the Defender exclusions a
+    # crack leaves behind, plus the backup/undo coverage for them.
+
+    It 'watches RunOnce as well as Run under Startup entries' {
+        $diag = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
+        $diag | Should -Match 'CurrentVersion\\RunOnce'
+    }
+
+    It 'reports the Defender exclusions that hide patched files' {
+        $diag = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
+        $diag | Should -Match '\.ExclusionPath'
+        $diag | Should -Match '\.ExclusionProcess'
+        $diag | Should -Match 'crack-related path'
+    }
+
+    It 'removes crack startup entries (Run / RunOnce) during the clean-up' {
+        $clean = Get-Content -LiteralPath (Join-Path $script:Root 'Clean.ps1') -Raw
+        $clean | Should -Match 'CurrentVersion\\RunOnce'
+        $clean | Should -Match 'Remove-ItemProperty'
+    }
+
+    It 'removes crack-related Defender exclusions, and the backup can restore them' {
+        $clean  = Get-Content -LiteralPath (Join-Path $script:Root 'Clean.ps1')  -Raw
+        $backup = Get-Content -LiteralPath (Join-Path $script:Root 'Backup.ps1') -Raw
+        $clean  | Should -Match 'Remove-MpPreference'
+        $backup | Should -Match 'defender-exclusions'
+        $backup | Should -Match 'Add-MpPreference'
+        $backup | Should -Match 'CurrentVersion\\RunOnce'
+    }
+
+    It 'removes hosts lines that block the Windows time servers' {
+        # the diagnostic saw these since 1.2.x; the clean-up used to keep them
+        $clean = Get-Content -LiteralPath (Join-Path $script:Root 'Clean.ps1') -Raw
+        $clean | Should -Match 'time\\\.windows'
+        $clean | Should -Match 'Test-BadHostsLine'
+    }
+
+    It 'covers the C:\FlexLM crack folder in diagnose, clean and backup' {
+        # the fake FLEXlm server folder is the classic crack drop, but the
+        # clean-up left it behind and no backup layer captured it
+        $diag   = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
+        $clean  = Get-Content -LiteralPath (Join-Path $script:Root 'Clean.ps1')  -Raw
+        $backup = Get-Content -LiteralPath (Join-Path $script:Root 'Backup.ps1') -Raw
+        $diag   | Should -Match 'C:\\FlexLM'
+        $clean  | Should -Match 'C:\\FlexLM'
+        $backup | Should -Match 'C:\\FlexLM'
+    }
+
+    It 'treats FlexLM-style paths as suspicious wherever they appear' {
+        # a crack task / Run value / env var pointing at C:\FlexLM was listed
+        # as plain INFO (the real-machine test caught this on 2026-10-16):
+        # the path classifier only knew AppData/Temp/ProgramData
+        $diag = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
+        $diag | Should -Match 'flexlm\|adskflex\|lmgrd'
+        $diag | Should -Match 'envHits'
+    }
+
+    It 'scans for patched copies and licpath files, and clears a renamed profile' {
+        $diag   = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
+        $clean  = Get-Content -LiteralPath (Join-Path $script:Root 'Clean.ps1')  -Raw
+        $repair = Get-Content -LiteralPath (Join-Path $script:Root 'Repair.ps1') -Raw
+        $diag   | Should -Match '_orig\|patched\|licpath'
+        $clean  | Should -Match '_orig\|patched\|licpath'
+        $repair | Should -Match 'EBWebView\*'
+    }
+
+    It 'resolves unquoted paths with spaces so the genuine Genuine-Service entry is kept' {
+        # the real-machine run removed the genuine "Autodesk Genuine Service"
+        # Run value: its unquoted path was not resolved to an exe, so it
+        # looked like a dead leftover
+        $clean = Get-Content -LiteralPath (Join-Path $script:Root 'Clean.ps1')  -Raw
+        $diag  = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
+        $clean | Should -Match '\.\+\?\\\.exe'
+        $diag  | Should -Match '\.\+\?\\\.exe'
+    }
+
+    It 'removes a scheduled task whose action is a crack path (the C:\FlexLM case)' {
+        # the real-machine run left the crack task behind: the task check only
+        # knew the user folders, so C:\FlexLM\adskflex.exe was not suspicious
+        $clean = Get-Content -LiteralPath (Join-Path $script:Root 'Clean.ps1') -Raw
+        $clean | Should -Match 'Test-SuspiciousExecPath'
+    }
+
+    It 'verifies and retries the hosts write when an antivirus locks the file' {
+        $clean = Get-Content -LiteralPath (Join-Path $script:Root 'Clean.ps1') -Raw
+        $clean | Should -Match 'stayed locked'
+    }
+
+    It 're-points the licensing Current junction at the newest genuine build (the real-machine case)' {
+        # the real-machine run re-pointed Current at a fake 8.1.2.0 stub build:
+        # Repair.ps1 only restarted the service, so the doctor kept reporting
+        # the tampered junction after the repair. The repair now fixes it.
+        $repair = Get-Content -LiteralPath (Join-Path $script:Root 'Repair.ps1') -Raw
+        $repair | Should -Match 'mklink /J'
+        $repair | Should -Match 'Test-GenuineAdlsBuild'
+        $repair | Should -Match 'Remove non-genuine licensing build folder'
+    }
+
+    It 'skips components that are already present and can never hang on an installer' {
+        # the lab run passed a whole product image to -InstallerDir: the Edge
+        # WebView2 bootstrapper then stayed alive forever in a background
+        # session and held the whole repair. Components that are present are
+        # skipped, and an installer that does not exit is killed at the timeout.
+        $repair = Get-Content -LiteralPath (Join-Path $script:Root 'Repair.ps1') -Raw
+        $repair | Should -Match 'already present - install skipped'
+        $repair | Should -Match 'WaitForExit\('
+        $repair | Should -Match 'still running after'
+    }
+
+    It 'the backup captures the loose crack files the clean-up deletes' {
+        # the lab clean-up deleted Common Files\Autodesk Shared\adskflex.exe and
+        # the product-tree leftovers (_orig / .bak / licpath / patched); nothing
+        # had captured them, so the toolkit UNDO could not bring them back
+        $backup = Get-Content -LiteralPath (Join-Path $script:Root 'Backup.ps1') -Raw
+        $backup | Should -Match 'loose crack files backed up'
+        $backup | Should -Match 'adskflex'
+    }
+
+    It 'never follows the licensing Current junction while backing up or restoring' {
+        # robocopy /E follows junctions: the lab backup stored the doctored
+        # 8.1.2.0 build under a real "Current" folder, and UNDO then copied its
+        # files through the junction into the genuine 17.0.0.16519 build
+        $backup = Get-Content -LiteralPath (Join-Path $script:Root 'Backup.ps1') -Raw
+        $backup | Should -Match '/XJ'
+    }
+
+    It 'does not walk through junctions while scanning licensing folders' {
+        # Windows PowerShell 5.1 Get-ChildItem -Recurse follows junctions: the
+        # dummy behind AdskLicensing\Current was counted once through the
+        # junction and once in the real build ("2 unsigned" for one file)
+        $diag = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
+        $diag | Should -Match 'Get-TreeFilesQuiet'
+        $diag | Should -Match 'ReparsePoint'
+    }
+
+    It 'clears the ODIS cache quietly, noting files a running process locks' {
+        # the lab clean-up sprayed raw Remove-Item errors while the cache
+        # database was still locked during shutdown of an Autodesk process
+        $clean = Get-Content -LiteralPath (Join-Path $script:Root 'Clean.ps1') -Raw
+        $clean | Should -Match 'they clear after reboot'
+    }
+
+    It 'installs the licensing service with its official unattended parameters' {
+        # from the package manifest itself (x86\Licensing\pkg.licensing.xml):
+        # installParams="--mode unattended --unattendedmodeui none".
+        # The '/S' style was silently ignored by this InstallBuilder package.
+        $repair = Get-Content -LiteralPath (Join-Path $script:Root 'Repair.ps1') -Raw
+        $repair | Should -Match '--mode unattended --unattendedmodeui none'
     }
 }
