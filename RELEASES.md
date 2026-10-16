@@ -1,5 +1,43 @@
 ﻿# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases
 
+## v1.3.0  (2026-10-16 17:31:33)
+
+Full removal (Phase 5) and two new top-bar buttons - validated in a lab VM on
+a fresh official AutoCAD 2025 install.
+
+**Full removal (Phase 5)**
+
+- New `Purge.ps1` engine behind the "Remove everything Autodesk" button:
+  official products are uninstalled first (ODIS bundles + MSI), then the
+  machine is swept clean - services, scheduled tasks, startup entries, hosts
+  hijacks, firewall rules, Defender exclusions, IFEO blockers, crack roots
+  (`C:\FlexLM`, `FLEXnet`, `FLEXlm`), leftover folders (Program Files,
+  ProgramData, user caches and profiles), Start Menu and desktop shortcuts,
+  HKLM/HKCU registry keys, orphaned Add/Remove entries, App Paths, MSI
+  registrations and environment variables - and the result is verified in a
+  final pass. Preview by default; `-Apply` runs the mandatory backup first.
+- New top-bar button **"Download the official apps"** opens Autodesk's
+  official download page (the toolkit itself never downloads anything) and
+  **"Remove everything Autodesk"** runs Phase 5 behind two confirmations -
+  for machines a customer would rather wipe and reinstall than repair.
+
+**Hardening**
+
+- Hosts cleanup is now atomic: the cleaned file is written beside the
+  original and swapped in with a retry window of about 15 seconds, so a
+  transient antivirus or snapshot lock can no longer leave the hosts file
+  empty or half-written.
+- Lab validation: AutoCAD 2025 installed officially, crack leftovers
+  planted, diagnostic -> cleanup -> repair loop brought the machine back to
+  green, then the full-removal flow ran end-to-end and an independent
+  remnant scan confirmed the machine is clean (the only survivor is the
+  shared Flexera licensing service - it belongs to Flexera, not Autodesk,
+  and other software uses it).
+
+- `AdskDoctor-v1.3.0-Project.zip`  -  0.15 MB  -  SHA256 `948A5C765CCEDD5B9FF0CC17F5188FF324A608CDCCC2B40D10EF66981B8949BB`
+- `AdskDoctor-v1.3.0-Portable.zip`  -  0.16 MB  -  SHA256 `8A734E61FD58067E4C300B130E0BD3F0C61659B7603346FEDA5F6D228C8A03F9`
+- `UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.0.exe`  -  2.12 MB  -  SHA256 `02C5B670690D0793AB08CCAC82F532C8CB261C8E5C326271CCD63DE941DB0026`
+
 ## v1.2.9  (2026-10-16 06:43:37)
 
 Field hardening from a real end-to-end run.
