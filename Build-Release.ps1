@@ -188,6 +188,9 @@ foreach ($f in $sourceScripts + $launchers) {
     $src = Join-Path $root $f
     if (Test-Path $src) { Copy-Item $src $sProj -Force }
 }
+# Every download must offer a double-click launch file, so the compiled exe
+# ships in the Project archive too (it is already inside Portable and Setup).
+Copy-Item $exe $sProj -Force
 Copy-Item $icon $sProj -Force
 if ($hasIco) { Copy-Item $logoIco $sProj -Force }
 if (Test-Path $logoPng) { Copy-Item $logoPng $sProj -Force }
