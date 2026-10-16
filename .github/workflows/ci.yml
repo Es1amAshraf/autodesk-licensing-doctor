@@ -122,7 +122,7 @@ jobs:
         run: |
           $required = @(
             'Build-Release.ps1', 'AdskDoctor-GUI.ps1', 'AdskDoctor.ps1', 'Backup.ps1',
-            'Clean.ps1', 'Repair.ps1', 'AdskDoctor.ico', 'unlock-logo.ico',
+            'Clean.ps1', 'Purge.ps1', 'Repair.ps1', 'AdskDoctor.ico', 'unlock-logo.ico',
             'make-logo-icon.ps1', 'installer\AdskDoctor.iss', 'LICENSE', 'README.md',
             'CODE-SIGNING.md', 'PRIVACY.md'
           )

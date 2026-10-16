@@ -11,7 +11,8 @@
 A portable Windows toolkit for Autodesk resellers and IT pros that **removes
 leftovers of non-genuine Autodesk patches** and **restores healthy official
 single-user subscription licensing** (`ADLS` + `AdSSO`), so genuine products
-activate and run normally again.
+activate and run normally again. It also carries a **full-removal option** that
+takes every Autodesk trace off a machine for a clean re-install.
 
 Windows 10 / 11 · GUI in **Arabic + English** · no installation required.
 
@@ -68,7 +69,7 @@ applicable laws in your jurisdiction.
 
 ---
 
-## How it works — 4 phases
+## How it works — 5 phases
 
 | Phase | Purpose | Changes system? |
 |-------|---------|-----------------|
@@ -76,10 +77,13 @@ applicable laws in your jurisdiction.
 | **2** | Layered backup + generated `UNDO.ps1` | writes backup only |
 | **3** | Safe cleanup of leftovers from non-genuine patches | **preview by default** — needs `-Apply` |
 | **4** | Repair / reinstall official licensing components (ADLS, AdSSO) | **preview by default** — needs `-Apply` |
+| **5** | Full removal — every Autodesk trace (products, licensing, registry, crack roots) off the machine | **preview by default** — needs `-Apply` |
 
-**Safety model:** backup always runs first, cleanup/repair do **nothing** until
-you explicitly pass `-Apply`, and every change is reversible through the
-backup's `UNDO.ps1`.
+**Safety model:** backup always runs first, cleanup/repair/removal do
+**nothing** until you explicitly pass `-Apply`, and every cleanup change is
+reversible through the backup's `UNDO.ps1`. The full removal (Phase 5) backs up
+first as well, but it means what it says — the products have to be installed
+fresh afterwards.
 
 ---
 
@@ -95,6 +99,7 @@ backup's `UNDO.ps1`.
 | **Product does not start at all, no error** | **IFEO execution blockers** — a `Debugger` value squeezing an Autodesk executable. Cleanup removes them; the Repair phase cannot succeed while one is in place. |
 | **Error 1603 / "unable to install"** | Orphaned uninstall entries, VC++ 2015–2022 runtime, TEMP, ODIS installer cache, antivirus / Controlled Folder Access. |
 | **Activation refused, clock errors** | Windows Time service and system clock drift against internet time. |
+| **"I don't want a repair — wipe everything and start clean"** | The **Remove Autodesk completely** button (Phase 5) uninstalls the products the official way, then removes every folder, service, task, registry key and crack root, and verifies the machine is clean. |
 
 The diagnostic always states a verdict and groups the problems by area, so a
 report with hundreds of findings still reads as a short list of things to do.
@@ -119,6 +124,12 @@ report with hundreds of findings still reads as a short list of things to do.
 2. Run **`UNLOCK-DIGITAL-AdskDoctor.exe`** (accept the UAC prompt) → bilingual GUI opens.
 3. Keep all files in the same folder — the app calls the `.ps1` scripts sitting
    next to the `.exe`.
+
+Two extra buttons in the top bar, next to the language toggle:
+
+* **Download official products** — opens the official Autodesk download page.
+* **Remove Autodesk completely** — Phase 5: takes every Autodesk trace off the
+  machine. It asks for confirmation twice and runs a backup first.
 
 ---
 
@@ -151,11 +162,16 @@ powershell -ExecutionPolicy Bypass -File .\Repair.ps1 -Apply -InstallerDir "D:\A
 powershell -ExecutionPolicy Bypass -File .\Repair.ps1 -Apply `
     -AdlsInstaller "C:\...\Autodesk_Licensing_Service.exe" `
     -WebView2Installer "C:\...\MicrosoftEdgeWebview2Setup.exe"
+
+# Phase 5 — full removal (preview first!): every Autodesk trace off the machine
+powershell -ExecutionPolicy Bypass -File .\Purge.ps1
+powershell -ExecutionPolicy Bypass -File .\Purge.ps1 -Apply
 ```
 
 `Repair.ps1` **never downloads anything.** It installs the official components
 you give it, and when one is missing with no installer supplied it prints where
-to get the official one instead of inventing a source.
+to get the official one instead of inventing a source. `Purge.ps1` never
+downloads anything either — it only removes.
 
 ---
 
@@ -293,6 +309,7 @@ certificate), sign the built binaries yourself:
 | `AdskDoctor.ps1` | Phase 1 — diagnostic engine |
 | `Backup.ps1` | Phase 2 — layered backup + `UNDO.ps1` generator |
 | `Clean.ps1` | Phase 3 — cleanup (preview by default) |
+| `Purge.ps1` | Phase 5 — full removal (preview by default, backup first) |
 | `Repair.ps1` | Phase 4 — repair / reinstall official components |
 | `Build-Release.ps1` | release builder (Project/Portable zips + Setup.exe + record) |
 | `installer/` | `AdskDoctor.iss` (Inno Setup) + `Install.cmd` / `Install.ps1` / `Uninstall.*` |
@@ -381,9 +398,16 @@ info → Run anyway**, and verify the **SHA256** of your download first (see
 **Does it work on Windows 7 / macOS?**
 No. Windows 10 and Windows 11 only, and only the Windows Autodesk products.
 
+**I don't want a repair — I want everything Autodesk gone. How?**
+Use the **Remove Autodesk completely** button (or `Purge.ps1 -Apply`). It backs
+up first, uninstalls the products the official way, then removes every
+remaining folder, service, task, registry key and crack root and verifies that
+nothing is left. Reboot, install a fresh official copy and sign in.
+
 **Can I run it unattended on many machines?**
-Yes — the engine is a script: `Clean.ps1 -Apply` and `Repair.ps1 -Apply` are
-non-interactive, and the diagnostic can export JSON for your ticket system.
+Yes — the engine is a script: `Clean.ps1 -Apply`, `Repair.ps1 -Apply` and
+`Purge.ps1 -Apply` are non-interactive, and the diagnostic can export JSON for
+your ticket system.
 
 **Does it send anything anywhere?**
 No. See [PRIVACY.md](PRIVACY.md).

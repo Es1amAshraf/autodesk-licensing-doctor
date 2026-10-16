@@ -3,7 +3,7 @@
     ---------------------------------------------------------------------------
     Bilingual Windows GUI (Arabic / English) with a live language toggle.
     Wraps the Phase 1-4 scripts:
-        AdskDoctor.ps1 (diagnostic)  Backup.ps1  Clean.ps1  Repair.ps1
+        AdskDoctor.ps1 (diagnostic)  Backup.ps1  Clean.ps1  Purge.ps1  Repair.ps1
     Loads a company logo (unlock-logo.png) from this folder if present.
 
     Run:  powershell -STA -ExecutionPolicy Bypass -File .\AdskDoctor-GUI.ps1
@@ -68,6 +68,14 @@ $L = @{
     bUndo         = 'رجوع (Undo)'
     bReport       = 'فتح آخر تقرير'
     bLang         = 'English'
+    bPurge        = 'إزالة أوتوديسك بالكامل'
+    purgeTip      = 'يمسح كل منتجات ومكوّنات أوتوديسك من الجهاز (بنسخة احتياطية أولاً) — عشان تبدأ من الصفر بنسخة رسمية جديدة'
+    purgeTitle    = 'إزالة أوتوديسك بالكامل'
+    purgeText     = "هتشيل كل حاجة تخص أوتوديسك من الجهاز: البرامج، الترخيص، الخدمات، السجل، وبقايا الكراك.`n`nنعم = تنفيذ فعلي (بعد نسخة احتياطية)`nلا  = معاينة بس (بدون أي تغيير)"
+    purgeWarn     = "تحذير أخير: الإزالة نهائية — بعدها هتحتاج تسطّب نسخة رسمية جديدة بنفسك.`n`nمتأكد؟"
+    purgeApply    = 'إزالة أوتوديسك بالكامل (تنفيذ)'
+    purgePreview  = 'إزالة أوتوديسك بالكامل (معاينة)'
+    purgeMissing  = 'ملف الإزالة Purge.ps1 لسه مش موجود.'
     bDownload     = 'تحميل البرامج الرسمية'
     downloadTip   = 'افتح موقع أوتوديسك الرسمي لتحميل البرامج (بحساب الاشتراك)'
     bBundle       = 'حزمة الدعم (تقرير + لوجات)'
@@ -121,6 +129,14 @@ $L = @{
     bUndo         = 'Roll back (Undo)'
     bReport       = 'Open last report'
     bLang         = 'العربية'
+    bPurge        = 'Remove Autodesk completely'
+    purgeTip      = 'Removes every Autodesk product and component from this PC (with a backup first) - start from zero with a fresh official copy'
+    purgeTitle    = 'Remove Autodesk completely'
+    purgeText     = "This removes everything Autodesk from this PC: products, licensing, services, registry and crack leftovers.`n`nYes = apply (a backup runs first)`nNo  = preview only (no changes)"
+    purgeWarn     = "Final warning: the removal is permanent - afterwards you install a fresh official copy yourself.`n`nAre you sure?"
+    purgeApply    = 'Remove Autodesk completely (apply)'
+    purgePreview  = 'Remove Autodesk completely (preview)'
+    purgeMissing  = 'Purge.ps1 is not present yet.'
     bDownload     = 'Download official products'
     downloadTip   = 'Open the official Autodesk download page (sign in with your subscription)'
     bBundle       = 'Support bundle (report + logs)'
@@ -197,8 +213,14 @@ function T { param([string]$k) $L[$script:lang][$k] }
             <TextBlock x:Name="SubTitle" Text="" Foreground="#AEB3BD" FontSize="13" Margin="0,4,0,0"/>
           </StackPanel>
         </StackPanel>
-        <Button x:Name="BtnLang" Grid.Column="1" Content="English" Width="110" Height="34"
-                VerticalAlignment="Top" Background="#22252B" Foreground="White" BorderBrush="#3A3E46"/>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+          <Button x:Name="BtnDownload" Content="" Height="34" Padding="14,0" Margin="0,0,8,0"
+                  Background="#E41E2E" Foreground="White" FontWeight="SemiBold" BorderBrush="#E41E2E"/>
+          <Button x:Name="BtnPurge" Content="" Height="34" Padding="14,0" Margin="0,0,8,0"
+                  Background="#22252B" Foreground="#FF7A7A" BorderBrush="#7F1D1D" FontWeight="SemiBold"/>
+          <Button x:Name="BtnLang" Content="English" Width="110" Height="34"
+                  Background="#22252B" Foreground="White" BorderBrush="#3A3E46"/>
+        </StackPanel>
       </Grid>
     </Border>
 
@@ -222,7 +244,6 @@ function T { param([string]$k) $L[$script:lang][$k] }
           <Button x:Name="BtnRepair" Content="" Height="40" Margin="0,0,0,6" FontSize="13"/>
           <Button x:Name="BtnUndo"   Content="" Height="40" Margin="0,0,0,6" FontSize="13"/>
           <Separator Margin="0,6,0,6"/>
-          <Button x:Name="BtnDownload" Content="" Height="38" Margin="0,0,0,6" FontSize="13" Background="#E41E2E" Foreground="White" FontWeight="SemiBold"/>
           <Button x:Name="BtnReport" Content="" Height="34" Margin="0,0,0,6" FontSize="13"/>
           <Button x:Name="BtnBundle" Content="" Height="34" Margin="0,0,0,6" FontSize="13"/>
           <TextBlock x:Name="TipText" TextWrapping="Wrap" Foreground="#8A8F99" FontSize="11" Margin="0,10,0,0"/>
@@ -279,7 +300,7 @@ $StatusText = $win.FindName('StatusText')
 $Bar        = $win.FindName('Bar')
 $LogTitle   = $win.FindName('LogTitle')
 $buttons    = @{}
-foreach ($n in 'BtnDiag','BtnBackup','BtnClean','BtnRepair','BtnUndo','BtnDownload','BtnReport','BtnBundle','BtnLang') {
+foreach ($n in 'BtnDiag','BtnBackup','BtnClean','BtnRepair','BtnUndo','BtnDownload','BtnPurge','BtnReport','BtnBundle','BtnLang') {
     $buttons[$n] = $win.FindName($n)
 }
 
@@ -321,6 +342,8 @@ function Apply-Language {
     $buttons['BtnReport'].Content = T 'bReport'
     $buttons['BtnDownload'].Content = T 'bDownload'
     $buttons['BtnDownload'].ToolTip = T 'downloadTip'
+    $buttons['BtnPurge'].Content = T 'bPurge'
+    $buttons['BtnPurge'].ToolTip = T 'purgeTip'
     $buttons['BtnBundle'].Content = T 'bBundle'
     $buttons['BtnBundle'].ToolTip = T 'bundleTip'
     $buttons['BtnLang'].Content   = T 'bLang'
@@ -542,6 +565,24 @@ $buttons['BtnBundle'].Add_Click({
 })
 
 $buttons['BtnDownload'].Add_Click({ Start-Process 'https://manage.autodesk.com/products/all' })
+
+# Full removal: deliberately separate from the repair flow. It does not fix
+# anything - it removes every Autodesk trace so a fresh official copy can be
+# installed afterwards. Preview sits next to the real run, and the real run
+# asks a second, explicit confirmation.
+$buttons['BtnPurge'].Add_Click({
+    $purge = Join-Path $here 'Purge.ps1'
+    if (-not (Test-Path -LiteralPath $purge)) { [System.Windows.MessageBox]::Show((T 'purgeMissing'),'UNLOCK DIGITAL') | Out-Null; return }
+    $r = [System.Windows.MessageBox]::Show((T 'purgeText'), (T 'purgeTitle'), 'YesNoCancel', 'Warning')
+    if ($r -eq 'Cancel') { return }
+    if ($r -eq 'Yes') {
+        $r2 = [System.Windows.MessageBox]::Show((T 'purgeWarn'), (T 'purgeTitle'), 'YesNo', 'Warning')
+        if ($r2 -ne 'Yes') { return }
+        Run-Task -Title (T 'purgeApply') -Arguments @('-File', $purge, '-Apply')
+    } else {
+        Run-Task -Title (T 'purgePreview') -Arguments @('-File', $purge)
+    }
+})
 
 # ---------------------------------------------------------------------------
 # Modal picker

@@ -212,7 +212,7 @@ Describe 'Regression guards' {
         # A folder scan that used "-LiteralPath ... -Include *.exe" really scanned
         # every file, and every JSON/font/PNG came back as "INVALID signature":
         # 322 of those reached a customer on a healthy machine.
-        foreach ($name in @('AdskDoctor.ps1', 'Clean.ps1', 'Repair.ps1', 'Backup.ps1')) {
+        foreach ($name in @('AdskDoctor.ps1', 'Clean.ps1', 'Purge.ps1', 'Repair.ps1', 'Backup.ps1')) {
             $text = Get-Content -LiteralPath (Join-Path $script:Root $name) -Raw
             $text | Should -Not -Match '-LiteralPath[^\r\n]*-Include' -Because "$name must filter file lists itself"
         }
@@ -273,7 +273,7 @@ Describe 'Regression guards' {
     It 'never downloads a component (official installers only)' {
         # a licensing tool that pulls binaries off the internet is a security
         # problem, and it is the opposite of what this toolkit promises
-        foreach ($name in @('Repair.ps1', 'AdskDoctor.ps1', 'Clean.ps1', 'Backup.ps1')) {
+        foreach ($name in @('Repair.ps1', 'AdskDoctor.ps1', 'Clean.ps1', 'Purge.ps1', 'Backup.ps1')) {
             $text = Get-Content -LiteralPath (Join-Path $script:Root $name) -Raw
             $text | Should -Not -Match 'Invoke-WebRequest[^\r\n]*\.(exe|msi)' -Because "$name must not download installers"
             $text | Should -Not -Match 'Start-BitsTransfer|DownloadFile|DownloadString'
@@ -507,5 +507,53 @@ Describe 'Field-gap guards' {
         # The '/S' style was silently ignored by this InstallBuilder package.
         $repair = Get-Content -LiteralPath (Join-Path $script:Root 'Repair.ps1') -Raw
         $repair | Should -Match '--mode unattended --unattendedmodeui none'
+    }
+}
+
+Describe 'Full removal (Purge.ps1)' {
+    # Phase 5 answers the customer case "I do not want a repair - take
+    # everything Autodesk off this machine so I can install a clean copy".
+
+    It 'without -Apply changes nothing and lists what would be removed' {
+        $out = Invoke-ToolScript 'Purge.ps1'
+        $out | Should -Match 'Phase 5'
+        $out | Should -Match 'PREVIEW only - nothing was changed'
+        $out | Should -Not -Match '\[ done \]'
+        Get-HostsHash | Should -Be $script:HostsHash -Because 'a preview must not rewrite the hosts file'
+    }
+
+    It 'keeps the mandatory backup gate and never touches its own process' {
+        $purge = Get-Content -LiteralPath (Join-Path $script:Root 'Purge.ps1') -Raw
+        $purge | Should -Match 'mandatory backup \(Phase 2\)'
+        $purge | Should -Match 'AdskDoctor\|UNLOCK'
+        $purge | Should -Match 'Backup\.ps1'
+    }
+
+    It 'uninstalls officially first, then sweeps every known Autodesk area' {
+        $purge = Get-Content -LiteralPath (Join-Path $script:Root 'Purge.ps1') -Raw
+        $purge | Should -Match 'bundleManifest\.xml'
+        $purge | Should -Match 'msiexec'
+        $purge | Should -Match 'sc\.exe delete'
+        $purge | Should -Match 'FLEXlm License Manager'
+        $purge | Should -Match 'FlexLM'
+        $purge | Should -Match 'Autodesk Shared'
+        $purge | Should -Match 'Broken MSI registrations'
+    }
+
+    It 'verifies afterwards that nothing Autodesk survived' {
+        $purge = Get-Content -LiteralPath (Join-Path $script:Root 'Purge.ps1') -Raw
+        $purge | Should -Match 'VERIFIED: no Autodesk components remain'
+        $purge | Should -Match 'locked files usually clear after a reboot'
+    }
+
+    It 'the UI carries the two top-bar buttons: download and full removal' {
+        $gui = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor-GUI.ps1') -Raw
+        $gui | Should -Match 'x:Name="BtnPurge"'
+        $gui | Should -Match "T 'purgeText'"
+        $gui | Should -Match "T 'purgeWarn'"
+        # the download button used to sit in the action panel (Height 38);
+        # it now lives in the header, in front of the language toggle
+        $gui | Should -Not -Match 'BtnDownload[^>]*Height="38"'
+        $gui | Should -Match 'BtnDownload[\s\S]{0,600}BtnPurge[\s\S]{0,600}BtnLang'
     }
 }
