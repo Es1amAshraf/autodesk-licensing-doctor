@@ -53,7 +53,14 @@ $env:Path = $env:Path + ';C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI'
 
 function Invoke-Git {
     param([string[]]$GitArgs)
-    $out = & git @GitArgs 2>&1
+    # Windows PowerShell 5.1 with $ErrorActionPreference 'Stop' turns git's
+    # stderr lines into a terminating NativeCommandError - and 'git push' always
+    # writes its progress report to stderr, so the publish died there before the
+    # release was created. Capture with 'Continue' and rely on the exit code,
+    # which is what the check below was meant to do all along.
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { $out = & git @GitArgs 2>&1 } finally { $ErrorActionPreference = $prevEAP }
     $code = $LASTEXITCODE
     if ($out) { $out | ForEach-Object { if ($_ -is [string]) { Write-Host ("      " + $_) -ForegroundColor DarkGray } } }
     if ($code -ne 0) { throw ("git " + ($GitArgs -join ' ') + " failed (exit $code)") }
