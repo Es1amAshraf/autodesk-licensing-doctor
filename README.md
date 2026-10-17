@@ -22,16 +22,16 @@ Windows 10 / 11 · GUI in **Arabic + English** · no installation required.
 
 | What | Link |
 |------|------|
-| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.3.exe` (2.12 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.3.3/UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.3.exe) |
+| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.4.0.exe` (2.13 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.4.0/UNLOCK-DIGITAL-AdskDoctor-Setup-1.4.0.exe) |
 | Portable `.zip` (no install) and full source | [releases page](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest) |
 | Always the newest release | <https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest> |
 
 SHA256 of the files above (also in `SHA256SUMS.txt` on the release page):
 
 ```text
-7E4E89278BBC0BB400020C678DEEF78627985FC06792E7E91CC78C38DD578B80  UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.3.exe
-4407B751968B1710223305F0A30C9ECB0934952300826E4A8921A76C4E03300C  AdskDoctor-v1.3.3-Portable.zip
-D5309A4FA574CDE0F84FB68D35F1655A60F314357D5667D718AA5686967C2D5E  AdskDoctor-v1.3.3-Project.zip
+DE6AF8455502A38FC410A729AF070D856FF70909BF38B399BEE1BA2B1BF79615  UNLOCK-DIGITAL-AdskDoctor-Setup-1.4.0.exe
+9F6AB60C95CE6BEE6BF07897575080B083B661820D6DD17299436AE9411AA6EA  AdskDoctor-v1.4.0-Portable.zip
+70F5FC664989CB3C5F444A02B2A679971ADFB59D19DBA9D39CB7CB43F5DBC9AA  AdskDoctor-v1.4.0-Project.zip
 ```
 
 See [Verify your download](#verify-your-download).
@@ -126,11 +126,19 @@ report with hundreds of findings still reads as a short list of things to do.
 3. Keep all files in the same folder — the app calls the `.ps1` scripts sitting
    next to the `.exe`.
 
-Two extra buttons in the top bar, next to the language toggle:
+Extra buttons in the top bar, next to the language toggle:
 
 * **Download official products** — opens the official Autodesk download page.
 * **Remove Autodesk completely** — Phase 5: takes every Autodesk trace off the
   machine. It asks for confirmation twice and runs a backup first.
+* **Update tool** — checks GitHub for a newer official release (the only moment
+  the tool talks to GitHub, and only when you press it). Already on the latest
+  version? It simply tells you so. Otherwise it downloads the release archive,
+  verifies its SHA256 against the published `SHA256SUMS.txt`, copies the files
+  over the running copy and reopens the app — no manual reinstall. It works the
+  same for the Portable, the Project and the installed versions: the compiled
+  launcher `.exe` ships in all three downloads, so the update brings a fresh
+  launcher too.
 
 In the left panel, **License mode** fills itself with the products the licensing
 service has registered: pick a product, pick the license type (**single-user
@@ -191,6 +199,14 @@ powershell -ExecutionPolicy Bypass -File .\Repair.ps1 -Apply `
 # Phase 5 — full removal (preview first!): every Autodesk trace off the machine
 powershell -ExecutionPolicy Bypass -File .\Purge.ps1
 powershell -ExecutionPolicy Bypass -File .\Purge.ps1 -Apply
+
+# Update tool — is there a newer release? (checks GitHub, downloads nothing)
+powershell -ExecutionPolicy Bypass -File .\Update.ps1 -Check
+
+# Update tool — fetch + SHA256-verify + stage the latest official release; the
+# GUI Update button performs the in-place swap (the scripts refuse to run a
+# download that fails the checksum)
+powershell -ExecutionPolicy Bypass -File .\Update.ps1 -Download
 
 # License mode — list what the licensing service has registered…
 powershell -ExecutionPolicy Bypass -File .\LicenseMode.ps1 -List
@@ -359,6 +375,7 @@ certificate), sign the built binaries yourself:
 | `Purge.ps1` | Phase 5 — full removal (preview by default, backup first) |
 | `Repair.ps1` | Phase 4 — repair / reinstall official components |
 | `LicenseMode.ps1` | License mode — lists registered products, previews/switches the license type (USER / NETWORK / STANDALONE / RESET) via the official licensing helper |
+| `Update.ps1` | Self-update — checks GitHub for the latest official release; with `-Download` (or the GUI Update button) it fetches the archive, verifies SHA256 and stages the in-place swap |
 | `Build-Release.ps1` | release builder (Project/Portable zips + Setup.exe + record) |
 | `installer/` | `AdskDoctor.iss` (Inno Setup) + `Install.cmd` / `Install.ps1` / `Uninstall.*` |
 | `make-icon.ps1` | generates `AdskDoctor.ico` (app icon) |
