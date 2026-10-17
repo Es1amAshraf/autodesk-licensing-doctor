@@ -1,5 +1,13 @@
 ﻿# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases
 
+## v1.5.0  (2026-10-17 20:45:17)
+
+Adds the in-app Updater: the new Update button (Update.ps1 -Check / -Download) reads the latest GitHub release, says when you are already on the newest version, otherwise downloads the Portable archive, verifies its SHA256 against the SHA256SUMS.txt from the release, then swaps every file (including the launcher exe) and relaunches the app. The Repair flow no longer needs the opt-in auto-fetch checkbox - pressing Repair components (apply) is the confirmation, and a missing official ADLS / WebView2 is fetched straight from Autodesk / Microsoft with Authenticode and SHA256 checks. The header drops the Download official products button, keeps Remove Autodesk completely, and the updater button is simply labelled Update. Update.ps1 ships in all three downloads next to the compiled launcher exe.
+
+- `AdskDoctor-v1.5.0-Project.zip`  -  0.22 MB  -  SHA256 `86C868C6BBFD5AB0A38B197803F66A2A8FBFDEA4644E21762A566FCB16760B9A`
+- `AdskDoctor-v1.5.0-Portable.zip`  -  0.18 MB  -  SHA256 `1004980CCFA6C3652CFC81A90729E7BFF8B511EC3F9030AE17EEA9AA530E67BF`
+- `UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.0.exe`  -  2.14 MB  -  SHA256 `7CFA26F6063A6379453B5BB8693446EA1A46CC371829CCD55A7A98DA91C3078F`
+
 ## v1.4.0  (2026-10-17 19:48:20)
 
 Fixes the cleanup false positives from the 2026-10-17 machine trial: suspicious-name rules now need token boundaries (Cracked_Plaster.sbsar and DEPRECATED_Origin.maxcompound are safe), ProgramData\FLEXnet keeps its official service data and ProgramData\Autodesk\Adlm keeps the shipped ASR resources, and genuine env vars survive. The official FlexNet service (Flexera-signed) is accepted, UNDO restores environment variables, and the GUI Repair gains an opt-in auto-fetch checkbox (-AllowDownload) that downloads the official ADLS / WebView2 from Autodesk / Microsoft with Authenticode verification - plus -CheckOnly so a healthy machine is never asked for installer files.
