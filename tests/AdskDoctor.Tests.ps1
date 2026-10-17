@@ -10,6 +10,8 @@
          the licensing sections it claims to
       5. An old AdskLicensing build is flagged (the cracked-install case)
       6. The two field bugs that reached users cannot come back
+      7. License mode lists the registered products and previews / applies a
+         license-type switch through the official helper (stub-tested)
 
     The toolkit itself ships as Windows PowerShell 5.1, so every script under
     test is launched with powershell.exe even when Pester runs on PowerShell 7.
@@ -652,5 +654,186 @@ Describe 'Operation logs and smarter removal (v1.3.1 hardening)' {
     It 'keeps the action list scrollbar out of the UI' {
         $gui = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor-GUI.ps1') -Raw
         $gui | Should -Match 'ScrollViewer VerticalScrollBarVisibility="Hidden"'
+    }
+}
+
+Describe 'License mode (LicenseMode.ps1)' {
+    BeforeAll {
+        # A stand-in for AdskLicensingInstHelper.exe. It keeps the products in a
+        # small state file, appends every call to calls.log and answers like the
+        # real helper: 'list' prints a JSON array, 'change' updates the matching
+        # product. A real Autodesk install is NOT required.
+        $script:LicStubDir = Join-Path $script:Tmp 'licstub'
+        New-Item -ItemType Directory -Force -Path $script:LicStubDir | Out-Null
+        $script:LicStub = Join-Path $script:LicStubDir 'AdskLicensingInstHelper.ps1'
+        $script:LicStateJson = '[{"feature_id":"ACD","sel_prod_key":"001Q1","sel_prod_ver":"2025.0.0.F","lic_method":4,"lic_server_type":0,"lic_servers":null},{"feature_id":"REVIT","sel_prod_key":"829P1","sel_prod_ver":"2024.0.0.F","lic_method":1,"lic_server_type":1,"lic_servers":["@10.0.0.5"]}]'
+        @'
+# Stub for AdskLicensingInstHelper - mimics "list" and "change".
+# No param() block on purpose: every argument must arrive in $args verbatim
+# (a ValueFromRemainingArguments parameter swallows -pv, which PowerShell
+# binds to -PipelineVariable, and the call log would lie about the line).
+$HelperArgs = @($args)
+$stateFile = Join-Path $PSScriptRoot 'state.json'
+$logFile   = Join-Path $PSScriptRoot 'calls.log'
+Add-Content -Path $logFile -Value (($HelperArgs | ForEach-Object { "[$_]" }) -join ' ')
+$state = Get-Content -Raw -Path $stateFile | ConvertFrom-Json
+function Emit-State {
+    $parts = foreach ($p in $state) { $p | ConvertTo-Json -Depth 5 -Compress }
+    Write-Output ('[' + ($parts -join ',') + ']')
+}
+if ($HelperArgs.Count -gt 0 -and $HelperArgs[0] -eq 'change') {
+    $pk = $HelperArgs[[array]::IndexOf($HelperArgs, '-pk') + 1]
+    $lm = $HelperArgs[[array]::IndexOf($HelperArgs, '-lm') + 1]
+    foreach ($p in $state) {
+        if ($p.sel_prod_key -eq $pk) {
+            switch ($lm) {
+                'USER'       { $p.lic_method = 4 }
+                'NETWORK'    { $p.lic_method = 1 }
+                'STANDALONE' { $p.lic_method = 2 }
+                ''           { $p.lic_method = 0 }
+            }
+            if ($lm -eq '') { $p.lic_servers = @(); $p.lic_server_type = 0 }
+            if ($HelperArgs -contains '-ls') {
+                $ls = $HelperArgs[[array]::IndexOf($HelperArgs, '-ls') + 1]
+                if ($ls) { $p.lic_servers = @($ls -split ',') }
+            }
+            if ($HelperArgs -contains '-lt') {
+                $lt = $HelperArgs[[array]::IndexOf($HelperArgs, '-lt') + 1]
+                switch ($lt) {
+                    'SINGLE'      { $p.lic_server_type = 1 }
+                    'REDUNDANT'   { $p.lic_server_type = 2 }
+                    'DISTRIBUTED' { $p.lic_server_type = 3 }
+                }
+            }
+        }
+    }
+    $parts = foreach ($p in $state) { $p | ConvertTo-Json -Depth 5 -Compress }
+    ('[' + ($parts -join ',') + ']') | Set-Content -LiteralPath $stateFile
+    Write-Output '{"status": 0, "message": "Success"}'
+    exit 0
+}
+Emit-State
+exit 0
+'@ | Set-Content -LiteralPath $script:LicStub -Encoding ASCII
+
+        function Reset-LicStub {
+            Set-Content -LiteralPath (Join-Path $script:LicStubDir 'state.json') -Value $script:LicStateJson -Encoding ASCII
+            Remove-Item -LiteralPath (Join-Path $script:LicStubDir 'calls.log') -Force -ErrorAction SilentlyContinue
+        }
+        function Get-LicCalls {
+            @(Get-Content -LiteralPath (Join-Path $script:LicStubDir 'calls.log') -ErrorAction SilentlyContinue)
+        }
+        function Get-LicProductState {
+            param([string]$Key)
+            $st = (Get-Content -Raw -LiteralPath (Join-Path $script:LicStubDir 'state.json')) | ConvertFrom-Json
+            $st | Where-Object { $_.sel_prod_key -eq $Key } | Select-Object -First 1
+        }
+    }
+
+    BeforeEach { Reset-LicStub }
+
+    It 'lists the registered products as JSON for the GUI' {
+        $out = Invoke-ToolScript 'LicenseMode.ps1' @('-List', '-Json', '-HelperPath', $script:LicStub)
+        $j = $out | ConvertFrom-Json
+        $j.ok | Should -BeTrue
+        $j.count | Should -Be 2
+        $names = @($j.products | ForEach-Object { $_.name })
+        $names | Should -Contain 'AutoCAD'
+        $names | Should -Contain 'Revit'
+        ($j.products | Where-Object { $_.productKey -eq '001Q1' }).year | Should -Be 2025
+        ($j.products | Where-Object { $_.productKey -eq '829P1' }).method | Should -Be 'NETWORK'
+        ($j.products | Where-Object { $_.productKey -eq '829P1' }).servers[0] | Should -Be '@10.0.0.5'
+    }
+
+    It 'prints a readable product list for a human' {
+        $out = Invoke-ToolScript 'LicenseMode.ps1' @('-List', '-HelperPath', $script:LicStub)
+        $out | Should -Match 'AutoCAD 2025'
+        $out | Should -Match 'Revit 2024'
+        $out | Should -Match 'single-user \(sign-in\)'
+        $out | Should -Match 'network \(NLM\)'
+    }
+
+    It 'a preview never calls change' {
+        $out = Invoke-ToolScript 'LicenseMode.ps1' @('-HelperPath', $script:LicStub, '-ProductKey', '829P1', '-ProductVersion', '2024.0.0.F', '-LicenseType', 'USER')
+        $out | Should -Match 'PREVIEW'
+        $out | Should -Match 'Revit 2024'
+        @(Get-LicCalls | Where-Object { $_ -match '^\[change\]' }).Count | Should -Be 0
+        (Get-LicProductState '829P1').lic_method | Should -Be 1
+    }
+
+    It 'applies a switch and verifies it (needs an elevated shell)' {
+        if (-not $script:IsAdmin) { Set-ItResult -Skipped -Because 'changing the license type needs an elevated shell'; return }
+        $out = Invoke-ToolScript 'LicenseMode.ps1' @('-HelperPath', $script:LicStub, '-ProductKey', '829P1', '-ProductVersion', '2024.0.0.F', '-LicenseType', 'USER', '-Apply', '-NoProcessStop')
+        $out | Should -Match 'Verified'
+        (Get-LicProductState '829P1').lic_method | Should -Be 4
+        @(Get-LicCalls) | Should -Contain '[change] [-pk] [829P1] [-pv] [2024.0.0.F] [-lm] [USER]'
+    }
+
+    It 'passes one license server through (single address -> single server)' {
+        if (-not $script:IsAdmin) { Set-ItResult -Skipped -Because 'changing the license type needs an elevated shell'; return }
+        $out = Invoke-ToolScript 'LicenseMode.ps1' @('-HelperPath', $script:LicStub, '-ProductKey', '001Q1', '-ProductVersion', '2025.0.0.F', '-LicenseType', 'NETWORK', '-LicServers', ' 10.0.0.6 ', '-Apply', '-NoProcessStop')
+        $out | Should -Match 'Verified'
+        @(Get-LicCalls) | Should -Contain '[change] [-pk] [001Q1] [-pv] [2025.0.0.F] [-lm] [NETWORK] [-lt] [SINGLE] [-ls] [@10.0.0.6]'
+        (@(Get-LicProductState '001Q1').lic_servers) -join ',' | Should -Be '@10.0.0.6'
+    }
+
+    It 'treats a two-address list as a redundant pool' {
+        if (-not $script:IsAdmin) { Set-ItResult -Skipped -Because 'changing the license type needs an elevated shell'; return }
+        $out = Invoke-ToolScript 'LicenseMode.ps1' @('-HelperPath', $script:LicStub, '-ProductKey', '001Q1', '-ProductVersion', '2025.0.0.F', '-LicenseType', 'NETWORK', '-LicServers', '10.0.0.6,10.0.0.7', '-Apply', '-NoProcessStop')
+        $out | Should -Match 'Verified'
+        @(Get-LicCalls) | Should -Contain '[change] [-pk] [001Q1] [-pv] [2025.0.0.F] [-lm] [NETWORK] [-lt] [REDUNDANT] [-ls] [@10.0.0.6,@10.0.0.7]'
+    }
+
+    It 'RESET really clears the stored method (empty values reach the helper)' {
+        if (-not $script:IsAdmin) { Set-ItResult -Skipped -Because 'changing the license type needs an elevated shell'; return }
+        $out = Invoke-ToolScript 'LicenseMode.ps1' @('-HelperPath', $script:LicStub, '-ProductKey', '829P1', '-ProductVersion', '2024.0.0.F', '-LicenseType', 'RESET', '-Apply', '-NoProcessStop')
+        $out | Should -Match 'reset'
+        @(Get-LicCalls) | Should -Contain '[change] [-pk] [829P1] [-pv] [2024.0.0.F] [-lm] [] [-lt] [] [-ls] []'
+        (Get-LicProductState '829P1').lic_method | Should -Be 0
+    }
+
+    It 'refuses an unknown product key without calling change' {
+        $out = Invoke-ToolScript 'LicenseMode.ps1' @('-HelperPath', $script:LicStub, '-ProductKey', '999Z1', '-LicenseType', 'USER')
+        $out | Should -Match 'not registered'
+        @(Get-LicCalls | Where-Object { $_ -match '^\[change\]' }).Count | Should -Be 0
+    }
+
+    It 'reports a missing licensing service as clean JSON' {
+        $realRoot   = Join-Path ${env:ProgramFiles(x86)} 'Common Files\Autodesk Shared\AdskLicensing'
+        $realHelper = Join-Path $realRoot 'Current\helper\AdskLicensingInstHelper.exe'
+        $anyHelper  = @(Get-ChildItem -LiteralPath $realRoot -Recurse -Filter 'AdskLicensingInstHelper.exe' -ErrorAction SilentlyContinue)
+        if ((Test-Path -LiteralPath $realHelper) -or $anyHelper.Count -gt 0) {
+            Set-ItResult -Skipped -Because 'a real AdskLicensingInstHelper is installed here'
+            return
+        }
+        $out = Invoke-ToolScript 'LicenseMode.ps1' @('-List', '-Json')
+        $j = $out | ConvertFrom-Json
+        $j.ok | Should -BeFalse
+        $j.code | Should -Be 'no-helper'
+    }
+
+    It 'switch runs land in the operation log; a read-only list does not' {
+        $oldNoLog  = $env:ADSKDOCTOR_NOLOG
+        $oldLogDir = $env:ADSKDOCTOR_LOGDIR
+        try {
+            Remove-Item Env:\ADSKDOCTOR_NOLOG -ErrorAction SilentlyContinue
+            $env:ADSKDOCTOR_LOGDIR = Join-Path $script:Tmp 'liclogs'
+            $null = Invoke-ToolScript 'LicenseMode.ps1' @('-List', '-HelperPath', $script:LicStub)
+            $null = Invoke-ToolScript 'LicenseMode.ps1' @('-HelperPath', $script:LicStub, '-ProductKey', '829P1', '-ProductVersion', '2024.0.0.F', '-LicenseType', 'USER')
+            $logs = @(Get-ChildItem -LiteralPath $env:ADSKDOCTOR_LOGDIR -Filter 'licensemode-*.log' -ErrorAction SilentlyContinue)
+            $logs.Count | Should -Be 1 -Because 'a preview/apply run is logged, a plain listing is not'
+        } finally {
+            if ($null -ne $oldNoLog)  { $env:ADSKDOCTOR_NOLOG = $oldNoLog }  else { Remove-Item Env:\ADSKDOCTOR_NOLOG  -ErrorAction SilentlyContinue }
+            if ($null -ne $oldLogDir) { $env:ADSKDOCTOR_LOGDIR = $oldLogDir } else { Remove-Item Env:\ADSKDOCTOR_LOGDIR -ErrorAction SilentlyContinue }
+        }
+    }
+
+    It 'is wired into the GUI and the build' {
+        $gui = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor-GUI.ps1') -Raw
+        $gui | Should -Match 'LicenseMode\.ps1'
+        $gui | Should -Match 'LicProductCombo'
+        @([regex]::Matches($gui, "licModeTitle\s*=")).Count | Should -BeGreaterOrEqual 2
+        $build = Get-Content -LiteralPath (Join-Path $script:Root 'Build-Release.ps1') -Raw
+        $build | Should -Match "'LicenseMode\.ps1'"
     }
 }

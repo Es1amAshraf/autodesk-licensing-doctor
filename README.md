@@ -95,6 +95,7 @@ fresh afterwards.
 | **"Connection Lost to Autodesk Desktop Licensing Service"** | ADLS presence, state, start-up mode and the signature of its service binary; an old or replaced build is reported and the Repair phase installs the official one. |
 | **Sign-in window never opens / sign-in fails** | AdSSO + identity component, **the Edge WebView2 runtime that renders the sign-in window**, `hosts` hijacks, firewall blocks, WinHTTP proxy, DNS and connectivity to `accounts.autodesk.com`. The product fails with a licensing error *before* the sign-in page when WebView2 is missing. |
 | **Ask for a serial number / activation screen** | Legacy ADLM licence cache (`ProductInformation.pit`, `ProgramData\FLEXnet`) left by a non-genuine activation — the Cleanup phase resets it so the product asks for a normal sign-in again. |
+| **Product opens on the license-server screen although the customer has a sign-in subscription** | Its registered license *method* is wrong (left over from a network/standalone setup). The GUI **License mode** panel (or `LicenseMode.ps1`) lists what the licensing service has registered and switches that product back to **single-user (sign-in)** — or to Network / Standalone / Reset — through the official `AdskLicensingInstHelper` (`list` / `change`). |
 | **"The license manager is not functioning"** | Leftover **Network License Manager** (service pointing at deleted binaries) — reported as a stale leftover and removed by Cleanup (`-KeepNLM` keeps it). |
 | **Product does not start at all, no error** | **IFEO execution blockers** — a `Debugger` value squeezing an Autodesk executable. Cleanup removes them; the Repair phase cannot succeed while one is in place. |
 | **Error 1603 / "unable to install"** | Orphaned uninstall entries, VC++ 2015–2022 runtime, TEMP, ODIS installer cache, antivirus / Controlled Folder Access. |
@@ -131,6 +132,15 @@ Two extra buttons in the top bar, next to the language toggle:
 * **Remove Autodesk completely** — Phase 5: takes every Autodesk trace off the
   machine. It asks for confirmation twice and runs a backup first.
 
+In the left panel, **License mode** fills itself with the products the licensing
+service has registered: pick a product, pick the license type (**single-user
+sign-in / network / standalone / reset**) and press **Switch license type**.
+It previews in the log, asks a confirmation, and only then applies — this is
+the fix when a product keeps opening on the license-server screen although the
+customer has a sign-in subscription. (Autodesk's own "Desktop Licensing Support
+Tool" used to do this; it is no longer distributed, and this uses the same
+official helper underneath.)
+
 ---
 
 ## Command line
@@ -166,12 +176,29 @@ powershell -ExecutionPolicy Bypass -File .\Repair.ps1 -Apply `
 # Phase 5 — full removal (preview first!): every Autodesk trace off the machine
 powershell -ExecutionPolicy Bypass -File .\Purge.ps1
 powershell -ExecutionPolicy Bypass -File .\Purge.ps1 -Apply
+
+# License mode — list what the licensing service has registered…
+powershell -ExecutionPolicy Bypass -File .\LicenseMode.ps1 -List
+powershell -ExecutionPolicy Bypass -File .\LicenseMode.ps1 -List -Json   # for the GUI
+
+# …and switch one product's license type (preview first!). USER = single-user
+# sign-in subscription; NETWORK = a license server; STANDALONE = legacy serial;
+# RESET only removes the stored choice, so the product asks again at next launch.
+powershell -ExecutionPolicy Bypass -File .\LicenseMode.ps1 -ProductKey 001Q1 -ProductVersion 2025.0.0.F -LicenseType USER
+powershell -ExecutionPolicy Bypass -File .\LicenseMode.ps1 -ProductKey 001Q1 -ProductVersion 2025.0.0.F -LicenseType USER -Apply
+
+# back to a license server (one address = single; two or three addresses without
+# -LicServerType are treated as a redundant pool; a port goes in as port@host)
+powershell -ExecutionPolicy Bypass -File .\LicenseMode.ps1 -ProductKey 829P1 -ProductVersion 2024.0.0.F -LicenseType NETWORK -LicServers "27000@licsrv01" -Apply
+powershell -ExecutionPolicy Bypass -File .\LicenseMode.ps1 -ProductKey 829P1 -ProductVersion 2024.0.0.F -LicenseType RESET -Apply
 ```
 
 `Repair.ps1` **never downloads anything.** It installs the official components
 you give it, and when one is missing with no installer supplied it prints where
 to get the official one instead of inventing a source. `Purge.ps1` never
-downloads anything either — it only removes.
+downloads anything either — it only removes. `LicenseMode.ps1` never downloads
+anything either — it drives the official helper that already ships with the
+installed products.
 
 ---
 
@@ -311,6 +338,7 @@ certificate), sign the built binaries yourself:
 | `Clean.ps1` | Phase 3 — cleanup (preview by default) |
 | `Purge.ps1` | Phase 5 — full removal (preview by default, backup first) |
 | `Repair.ps1` | Phase 4 — repair / reinstall official components |
+| `LicenseMode.ps1` | License mode — lists registered products, previews/switches the license type (USER / NETWORK / STANDALONE / RESET) via the official licensing helper |
 | `Build-Release.ps1` | release builder (Project/Portable zips + Setup.exe + record) |
 | `installer/` | `AdskDoctor.iss` (Inno Setup) + `Install.cmd` / `Install.ps1` / `Uninstall.*` |
 | `make-icon.ps1` | generates `AdskDoctor.ico` (app icon) |

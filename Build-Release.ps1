@@ -74,8 +74,8 @@ $icon       = Join-Path $root 'AdskDoctor.ico'
 $logoPng    = Join-Path $root 'unlock-logo.png'
 $logoIco    = Join-Path $root 'unlock-logo.ico'
 $licenseF   = Join-Path $root 'LICENSE'
-$runtimeScripts = @('AdskDoctor.ps1','Backup.ps1','Clean.ps1','Purge.ps1','Repair.ps1')
-$sourceScripts  = @('AdskDoctor.ps1','Backup.ps1','Clean.ps1','Purge.ps1','Repair.ps1','AdskDoctor-GUI.ps1','make-icon.ps1','make-logo-icon.ps1','Build-Release.ps1')
+$runtimeScripts = @('AdskDoctor.ps1','Backup.ps1','Clean.ps1','Purge.ps1','Repair.ps1','LicenseMode.ps1')
+$sourceScripts  = @('AdskDoctor.ps1','Backup.ps1','Clean.ps1','Purge.ps1','Repair.ps1','LicenseMode.ps1','AdskDoctor-GUI.ps1','make-icon.ps1','make-logo-icon.ps1','Build-Release.ps1')
 $launchers      = @('Run-Diagnostic.cmd','Run-Backup.cmd')
 $installerFiles = @('Install.ps1','Install.cmd','Uninstall.ps1','Uninstall.cmd')
 

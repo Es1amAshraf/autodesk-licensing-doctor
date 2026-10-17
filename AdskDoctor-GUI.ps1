@@ -4,6 +4,7 @@
     Bilingual Windows GUI (Arabic / English) with a live language toggle.
     Wraps the Phase 1-4 scripts:
         AdskDoctor.ps1 (diagnostic)  Backup.ps1  Clean.ps1  Purge.ps1  Repair.ps1
+        LicenseMode.ps1 (license type switch, driven by the panel on the left)
     Loads a company logo (unlock-logo.png) from this folder if present.
 
     Run:  powershell -STA -ExecutionPolicy Bypass -File .\AdskDoctor-GUI.ps1
@@ -80,7 +81,7 @@ $L = @{
     downloadTip   = 'افتح موقع أوتوديسك الرسمي لتحميل البرامج (بحساب الاشتراك)'
     bBundle       = 'حزمة الدعم (تقرير + لوجات)'
     bundleTip     = 'يعمل فحص ويجمع لوجات الترخيص مع التقرير في ملف ZIP واحد تبعته للدعم'
-    tip           = 'نصيحة: ابدأ بـ «فحص الجهاز»، بعدين «نسخة احتياطية»، وبعدها «تنظيف» ثم «إصلاح».'
+    tip           = 'نصيحة: ابدأ بـ «فحص الجهاز»، بعدين «نسخة احتياطية»، وبعدها «تنظيف» ثم «إصلاح». ولو منتج واقف على شاشة سيرفر الترخيص واشتراكك مستخدم واحد: استعمل «وضع الترخيص» وحوّله لـ«مستخدم واحد».'
     logTitle      = 'سجل العمليات'
     statusReady   = 'جاهز'
     statusRunning = 'شغّال: '
@@ -115,6 +116,29 @@ $L = @{
     pickOk        = 'اختيار'
     pickCancel    = 'إلغاء'
     busyMsg       = 'فيه عملية شغالة بالفعل، استنى تخلص.'
+    licModeTitle  = 'وضع الترخيص'
+    licApply      = 'تحويل نوع الترخيص'
+    licRefresh    = 'تحديث القائمة'
+    licMissing    = 'ملف LicenseMode.ps1 لسه مش موجود.'
+    licNoHelper   = 'خدمة ترخيص أوتوديسك (ADLS) مش متسطّبة على الجهاز — سطّب منتج 2020 أو أحدث الأول.'
+    licNoProducts = 'مفيش منتجات أوتوديسك (2020 أو أحدث) مسجّلة على الجهاز.'
+    licListFailed = 'تعذّر قراءة قائمة المنتجات من خدمة الترخيص.'
+    licError      = 'حصل خطأ أثناء قراءة حالة الترخيص.'
+    licCurrent    = 'الحالي: {0}'
+    licServersHint = 'سيرفرات الترخيص (مثال: 10.0.0.5 أو 27000@10.0.0.5,10.0.0.6) — لو سيبتها فاضية هيتحوّل الوضع بس'
+    licConfirmIntro = 'هيتم تحويل نوع ترخيص المنتج ده:'
+    licFrom       = 'من'
+    licTo         = 'إلى'
+    licServersLabel = 'السيرفرات'
+    licSure       = 'متأكد؟'
+    licNoServerAsk = "مفيش سيرفرات مكتوبة. تحويل الوضع من غير سيرفر؟`n`nنعم = كمّل`nلا = رجوع"
+    licUser       = 'مستخدم واحد (تسجيل دخول)'
+    licNetwork    = 'شبكة (سيرفر ترخيص NLM)'
+    licStandalone = 'سيريال (Standalone)'
+    licReset      = 'بدون وضع (Reset)'
+    licMssa       = 'MSSA'
+    licUnknown    = 'غير معروف'
+    licAutodesk   = 'منتج أوتوديسك'
   }
   en = @{
     windowTitle   = 'UNLOCK DIGITAL - Autodesk Licensing Doctor'
@@ -141,7 +165,7 @@ $L = @{
     downloadTip   = 'Open the official Autodesk download page (sign in with your subscription)'
     bBundle       = 'Support bundle (report + logs)'
     bundleTip     = 'Scan, then collect the licensing logs with the report into one zip to send to support'
-    tip           = 'Tip: start with "Scan this PC", then "Create backup", then "Clean this PC" and finally "Repair".'
+    tip           = 'Tip: start with "Scan this PC", then "Create backup", then "Clean this PC" and finally "Repair". Stuck on the license-server screen with a sign-in subscription? Use "License mode" and switch the product back to "Single-user".'
     logTitle      = 'Activity log'
     statusReady   = 'Ready'
     statusRunning = 'Running: '
@@ -176,6 +200,29 @@ $L = @{
     pickOk        = 'Select'
     pickCancel    = 'Cancel'
     busyMsg       = 'A task is already running, please wait.'
+    licModeTitle  = 'License mode'
+    licApply      = 'Switch license type'
+    licRefresh    = 'Refresh list'
+    licMissing    = 'LicenseMode.ps1 is not present yet.'
+    licNoHelper   = 'The Autodesk licensing service (ADLS) is not installed - install a 2020+ product first.'
+    licNoProducts = 'No Autodesk products (2020 or newer) are registered on this PC.'
+    licListFailed = 'Could not read the product list from the licensing service.'
+    licError      = 'Reading the license state failed.'
+    licCurrent    = 'Current: {0}'
+    licServersHint = 'License servers (e.g. 10.0.0.5 or 27000@10.0.0.5,10.0.0.6) - leave empty to switch the mode only'
+    licConfirmIntro = 'About to switch the license type of:'
+    licFrom       = 'From'
+    licTo         = 'To'
+    licServersLabel = 'Servers'
+    licSure       = 'Are you sure?'
+    licNoServerAsk = "No license servers typed. Switch the mode without a server?`n`nYes = continue`nNo = go back"
+    licUser       = 'Single-user (sign-in)'
+    licNetwork    = 'Network (NLM license server)'
+    licStandalone = 'Standalone (serial)'
+    licReset      = 'No mode (Reset)'
+    licMssa       = 'MSSA'
+    licUnknown    = 'unknown'
+    licAutodesk   = 'Autodesk product'
   }
 }
 
@@ -244,6 +291,17 @@ function T { param([string]$k) $L[$script:lang][$k] }
           <Button x:Name="BtnRepair" Content="" Height="40" Margin="0,0,0,6" FontSize="13"/>
           <Button x:Name="BtnUndo"   Content="" Height="40" Margin="0,0,0,6" FontSize="13"/>
           <Separator Margin="0,6,0,6"/>
+          <TextBlock x:Name="LicModeLabel" Text="License mode" FontSize="13" FontWeight="SemiBold" Foreground="#333" Margin="0,0,0,6"/>
+          <ComboBox x:Name="LicProductCombo" Height="30" Margin="0,0,0,6" FontSize="12" DisplayMemberPath="Display"/>
+          <TextBlock x:Name="LicCurrent" TextWrapping="Wrap" Foreground="#6B7280" FontSize="11" Margin="0,0,0,6"/>
+          <ComboBox x:Name="LicModeCombo" Height="30" Margin="0,0,0,6" FontSize="12"/>
+          <TextBox x:Name="LicServersBox" Height="26" Margin="0,0,0,4" FontSize="12" FlowDirection="LeftToRight" Visibility="Collapsed"/>
+          <TextBlock x:Name="LicServersHint" TextWrapping="Wrap" Foreground="#8A8F99" FontSize="11" Margin="0,0,0,6" Visibility="Collapsed"/>
+          <StackPanel Orientation="Horizontal">
+            <Button x:Name="LicApply" Content="" Height="34" Padding="12,0" Margin="0,0,6,0" Background="#E41E2E" Foreground="White" FontWeight="SemiBold" BorderBrush="#E41E2E"/>
+            <Button x:Name="LicRefresh" Content="" Height="34" Padding="12,0"/>
+          </StackPanel>
+          <Separator Margin="0,6,0,6"/>
           <Button x:Name="BtnReport" Content="" Height="34" Margin="0,0,0,6" FontSize="13"/>
           <Button x:Name="BtnBundle" Content="" Height="34" Margin="0,0,0,6" FontSize="13"/>
           <TextBlock x:Name="TipText" TextWrapping="Wrap" Foreground="#8A8F99" FontSize="11" Margin="0,10,0,0"/>
@@ -299,8 +357,14 @@ $TxtLog     = $win.FindName('TxtLog')
 $StatusText = $win.FindName('StatusText')
 $Bar        = $win.FindName('Bar')
 $LogTitle   = $win.FindName('LogTitle')
+$LicProductCombo = $win.FindName('LicProductCombo')
+$LicModeCombo    = $win.FindName('LicModeCombo')
+$LicCurrent      = $win.FindName('LicCurrent')
+$LicModeLabel    = $win.FindName('LicModeLabel')
+$LicServersBox   = $win.FindName('LicServersBox')
+$LicServersHint  = $win.FindName('LicServersHint')
 $buttons    = @{}
-foreach ($n in 'BtnDiag','BtnBackup','BtnClean','BtnRepair','BtnUndo','BtnDownload','BtnPurge','BtnReport','BtnBundle','BtnLang') {
+foreach ($n in 'BtnDiag','BtnBackup','BtnClean','BtnRepair','BtnUndo','BtnDownload','BtnPurge','BtnReport','BtnBundle','BtnLang','LicApply','LicRefresh') {
     $buttons[$n] = $win.FindName($n)
 }
 
@@ -347,6 +411,12 @@ function Apply-Language {
     $buttons['BtnBundle'].Content = T 'bBundle'
     $buttons['BtnBundle'].ToolTip = T 'bundleTip'
     $buttons['BtnLang'].Content   = T 'bLang'
+    $LicModeLabel.Text = T 'licModeTitle'
+    $buttons['LicApply'].Content = T 'licApply'
+    $buttons['LicRefresh'].Content = T 'licRefresh'
+    $LicServersHint.Text = T 'licServersHint'
+    Update-LicModeItems
+    Update-LicProductItems
     $TipText.Text = T 'tip'
     $win.FlowDirection = if ($script:lang -eq 'ar') { [System.Windows.FlowDirection]::RightToLeft } else { [System.Windows.FlowDirection]::LeftToRight }
     if (-not $script:busy) {
@@ -374,6 +444,12 @@ $script:outTask = $null
 $script:errTask = $null
 $script:timer = $null
 $script:taskDone = $false
+$script:licScript = Join-Path $here 'LicenseMode.ps1'
+$script:licProducts = @()
+$script:licModeOrder = @('USER', 'NETWORK', 'STANDALONE', 'RESET')
+$script:licUiUpdating = $false
+$script:licMessageKey = ''
+$script:licRefreshAfter = $false
 
 function Add-Log {
     param([string]$Text)
@@ -384,6 +460,9 @@ function Set-Busy {
     param([bool]$Busy)
     $script:busy = $Busy
     foreach ($b in $buttons.Values) { $b.IsEnabled = -not $Busy }
+    $LicProductCombo.IsEnabled = -not $Busy
+    $LicModeCombo.IsEnabled = -not $Busy
+    $LicServersBox.IsEnabled = -not $Busy
     $Bar.IsIndeterminate = $Busy
 }
 function Quote-Arg {
@@ -397,6 +476,12 @@ function End-Task {
     else { $StatusText.Text = ((T 'statusCode') + $Code); Add-Log ''; Add-Log ('>> ' + (T 'statusCode') + $Code) }
     if ($script:openAfter -and (Test-Path -LiteralPath $script:openAfter)) { Start-Process $script:openAfter }
     $script:openAfter = $null
+    # A license-mode run reloads the panel even when it exited non-zero: the
+    # helper may have applied the switch before the verification complained.
+    if ($script:licRefreshAfter) {
+        $script:licRefreshAfter = $false
+        Load-LicProducts
+    }
 }
 # ---------------------------------------------------------------------------
 # Child-process output
@@ -480,6 +565,140 @@ function Run-Task {
         if (-not $script:taskDone -and $script:proc -and $script:proc.HasExited) { Complete-Task }
     })
     $script:timer.Start()
+}
+
+# ---------------------------------------------------------------------------
+# License mode - lists the products the licensing service knows (through
+# LicenseMode.ps1 -List -Json) and switches one product's license type
+# (single-user / network / standalone / reset) through the same script.
+# ---------------------------------------------------------------------------
+function Get-MethodLabel {
+    param([string]$Method)
+    switch ($Method) {
+        'USER'       { T 'licUser' }
+        'NETWORK'    { T 'licNetwork' }
+        'STANDALONE' { T 'licStandalone' }
+        'MSSA'       { T 'licMssa' }
+        default      { T 'licUnknown' }
+    }
+}
+function Get-ModeChoiceLabel {
+    param([string]$Mode)
+    switch ($Mode) {
+        'USER'       { T 'licUser' }
+        'NETWORK'    { T 'licNetwork' }
+        'STANDALONE' { T 'licStandalone' }
+        'RESET'      { T 'licReset' }
+        default      { $Mode }
+    }
+}
+function Get-ProductDisplay {
+    param($P)
+    $name = if ($P.name) { $P.name } else { (T 'licAutodesk') + ' ' + $P.productKey }
+    if ($P.year) { $name = $name + ' ' + $P.year }
+    return ('{0}   ({1} / {2})' -f $name, $P.productKey, $P.productVersion)
+}
+function Get-SelectedLicMode {
+    $i = $LicModeCombo.SelectedIndex
+    if ($i -ge 0 -and $i -lt $script:licModeOrder.Count) { return $script:licModeOrder[$i] }
+    return ''
+}
+function Update-LicCurrent {
+    if ($script:busy) { return }
+    if ($script:licMessageKey) { $LicCurrent.Text = T $script:licMessageKey; return }
+    $it = $LicProductCombo.SelectedItem
+    if (-not $it) { $LicCurrent.Text = ''; return }
+    $p = $it.Product
+    $txt = (T 'licCurrent') -f (Get-MethodLabel $p.method)
+    $srv = @($p.servers)
+    if ($p.method -eq 'NETWORK' -and $srv.Count -gt 0) { $txt = $txt + '  ·  ' + ($srv -join ', ') }
+    $LicCurrent.Text = $txt
+}
+function Update-LicServersVisibility {
+    $vis = if ((Get-SelectedLicMode) -eq 'NETWORK') { 'Visible' } else { 'Collapsed' }
+    $LicServersBox.Visibility = $vis
+    $LicServersHint.Visibility = $vis
+}
+function Update-LicModeItems {
+    $script:licUiUpdating = $true
+    try {
+        $keep = Get-SelectedLicMode
+        $LicModeCombo.Items.Clear()
+        foreach ($m in $script:licModeOrder) { [void]$LicModeCombo.Items.Add((Get-ModeChoiceLabel $m)) }
+        $idx = [array]::IndexOf($script:licModeOrder, $keep)
+        if ($idx -lt 0) { $idx = 0 }
+        if ($LicModeCombo.Items.Count -gt 0) { $LicModeCombo.SelectedIndex = $idx }
+    } finally { $script:licUiUpdating = $false }
+    Update-LicServersVisibility
+}
+function Update-LicProductItems {
+    $script:licUiUpdating = $true
+    try {
+        $keep = ''
+        if ($LicProductCombo.SelectedItem) { $keep = $LicProductCombo.SelectedItem.Product.productKey + '|' + $LicProductCombo.SelectedItem.Product.productVersion }
+        $LicProductCombo.Items.Clear()
+        foreach ($p in $script:licProducts) {
+            [void]$LicProductCombo.Items.Add([pscustomobject]@{ Product = $p; Display = (Get-ProductDisplay $p) })
+        }
+        $idx = 0
+        if ($keep) {
+            for ($i = 0; $i -lt $LicProductCombo.Items.Count; $i++) {
+                $it = $LicProductCombo.Items[$i]
+                if (($it.Product.productKey + '|' + $it.Product.productVersion) -eq $keep) { $idx = $i; break }
+            }
+        }
+        if ($LicProductCombo.Items.Count -gt 0) { $LicProductCombo.SelectedIndex = $idx }
+    } finally { $script:licUiUpdating = $false }
+    Update-LicCurrent
+}
+function Load-LicProducts {
+    if (-not (Test-Path -LiteralPath $script:licScript)) {
+        $script:licProducts = @()
+        $script:licMessageKey = 'licMissing'
+        Update-LicProductItems
+        return
+    }
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = (Get-Command powershell).Source
+    $psi.Arguments = (@('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $script:licScript, '-List', '-Json') | ForEach-Object { Quote-Arg $_ }) -join ' '
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.CreateNoWindow = $true
+    $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+    $psi.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+    $p = New-Object System.Diagnostics.Process
+    $p.StartInfo = $psi
+    try {
+        $p.Start() | Out-Null
+        $outT = $p.StandardOutput.ReadToEndAsync()
+        $errT = $p.StandardError.ReadToEndAsync()
+    } catch {
+        $script:licProducts = @(); $script:licMessageKey = 'licError'; Update-LicProductItems; return
+    }
+    if (-not $p.WaitForExit(15000)) {
+        try { $p.Kill() } catch { }
+        $script:licProducts = @(); $script:licMessageKey = 'licError'; Update-LicProductItems; return
+    }
+    $txt = ($outT.Result + $errT.Result)
+    $j = $null
+    try { $j = ($txt.Trim() | ConvertFrom-Json) } catch { $j = $null }
+    if ($null -eq $j -or -not $j.ok) {
+        $code = ''
+        if ($j) { $code = [string]$j.code }
+        switch ($code) {
+            'no-helper'   { $script:licMessageKey = 'licNoHelper' }
+            'no-products' { $script:licMessageKey = 'licNoProducts' }
+            'list-failed' { $script:licMessageKey = 'licListFailed' }
+            default       { $script:licMessageKey = 'licError' }
+        }
+        $script:licProducts = @()
+        Update-LicProductItems
+        return
+    }
+    $script:licProducts = @($j.products)
+    $script:licMessageKey = if ($script:licProducts.Count -eq 0) { 'licNoProducts' } else { '' }
+    Update-LicProductItems
 }
 
 # ---------------------------------------------------------------------------
@@ -585,6 +804,56 @@ $buttons['BtnPurge'].Add_Click({
 })
 
 # ---------------------------------------------------------------------------
+# License mode actions
+# ---------------------------------------------------------------------------
+$LicProductCombo.Add_SelectionChanged({ if (-not $script:licUiUpdating) { Update-LicCurrent } })
+$LicModeCombo.Add_SelectionChanged({ if (-not $script:licUiUpdating) { Update-LicServersVisibility } })
+
+$buttons['LicRefresh'].Add_Click({
+    if ($script:busy) { return }
+    Load-LicProducts
+})
+
+$buttons['LicApply'].Add_Click({
+    if (-not (Test-Path -LiteralPath $script:licScript)) { [System.Windows.MessageBox]::Show((T 'licMissing'), 'UNLOCK DIGITAL') | Out-Null; return }
+    $it = $LicProductCombo.SelectedItem
+    if (-not $it) { [System.Windows.MessageBox]::Show((T 'licNoProducts'), 'UNLOCK DIGITAL') | Out-Null; return }
+    $p = $it.Product
+    $mode = Get-SelectedLicMode
+    if (-not $mode) { return }
+
+    # Network: optionally take license servers from the box. The spaces around
+    # the commas are removed here; LicenseMode.ps1 normalizes the rest.
+    $srv = ''
+    if ($mode -eq 'NETWORK') {
+        $srv = ($LicServersBox.Text -replace '\s*,\s*', ',').Trim()
+        if (-not $srv) {
+            $q = [System.Windows.MessageBox]::Show((T 'licNoServerAsk'), (T 'licModeTitle'), 'YesNo', 'Question')
+            if ($q -ne 'Yes') { return }
+        }
+    }
+
+    $lines = @(
+        (T 'licConfirmIntro'),
+        '  ' + $it.Display,
+        '',
+        '  ' + (T 'licFrom') + ': ' + (Get-MethodLabel $p.method),
+        '  ' + (T 'licTo') + ': ' + (Get-ModeChoiceLabel $mode)
+    )
+    if ($srv) { $lines += '  ' + (T 'licServersLabel') + ': ' + $srv }
+    $lines += ''
+    $lines += (T 'licSure')
+    $r = [System.Windows.MessageBox]::Show(($lines -join "`n"), (T 'licModeTitle'), 'YesNo', 'Question')
+    if ($r -ne 'Yes') { return }
+
+    $licArgs = @('-File', $script:licScript, '-ProductKey', $p.productKey, '-ProductVersion', $p.productVersion, '-LicenseType', $mode)
+    if ($mode -eq 'NETWORK' -and $srv) { $licArgs += @('-LicServers', $srv) }
+    $licArgs += '-Apply'
+    $script:licRefreshAfter = $true
+    Run-Task -Title ((T 'licModeTitle') + ': ' + (Get-ModeChoiceLabel $mode)) -Arguments $licArgs
+})
+
+# ---------------------------------------------------------------------------
 # Modal picker
 # ---------------------------------------------------------------------------
 function Show-Picker {
@@ -627,4 +896,5 @@ function Show-Picker {
 # Show
 # ---------------------------------------------------------------------------
 Apply-Language
+Load-LicProducts
 $win.ShowDialog() | Out-Null
