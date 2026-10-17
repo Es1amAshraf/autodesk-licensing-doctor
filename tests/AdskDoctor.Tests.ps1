@@ -535,6 +535,33 @@ Describe 'Field-gap guards' {
         $repair | Should -Match 'still running after'
     }
 
+    It 'fetches missing official components only when asked, and only from the vendors' {
+        # 2026-10-17 request: optionally fetch the latest official ADLS /
+        # WebView2 when one is missing. Off by default, official domains only,
+        # and every download must carry a valid vendor signature.
+        $repair = Get-Content -LiteralPath (Join-Path $script:Root 'Repair.ps1') -Raw
+        $repair | Should -Match 'AllowDownload'
+        $repair | Should -Match 'damassets\.autodesk\.net'
+        $repair | Should -Match 'LinkId=2124703'
+        $repair | Should -Match 'AuthenticodeSignature'
+        $repair | Should -Match 'signature check failed'
+        $repair | Should -Match '\$Apply -and \$AllowDownload'
+    }
+
+    It 'reports missing components without changes so the GUI stops asking for files on a healthy machine' {
+        # the operator used to be asked to locate installer files even when
+        # nothing was missing. -CheckOnly answers that question read-only and
+        # the GUI uses it before deciding to prompt or to auto-fetch.
+        $repair = Get-Content -LiteralPath (Join-Path $script:Root 'Repair.ps1') -Raw
+        $gui    = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor-GUI.ps1') -Raw
+        $repair | Should -Match 'CheckOnly'
+        $repair | Should -Match 'CHECKRESULT missing='
+        $gui    | Should -Match 'CheckOnly'
+        $gui    | Should -Match 'CHECKRESULT missing='
+        $gui    | Should -Match 'ChkFetch'
+        $gui    | Should -Match 'AllowDownload'
+    }
+
     It 'the backup restores environment variables (the 2026-10-17 UNDO gap)' {
         # the machine restore proved UNDO.ps1 never brought environment
         # variables back: the clean-up had removed ADSK_3DSMAX_x64_2025 and

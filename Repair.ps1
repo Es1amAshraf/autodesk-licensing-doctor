@@ -14,20 +14,25 @@
       6. Install official components (ADLS, AdSSO, Genuine, WebView2) that are missing
       7. Verify everything (service + files + WebView2 + connectivity to Autodesk)
 
-    Official installers (optional but recommended). Point -InstallerDir at a
-    folder that contains them, or pass each path explicitly. They are matched
-    by name, and the product's own install image is searched automatically:
+    Official installers: point -InstallerDir at a folder that contains them, or
+    pass each path explicitly. They are matched by name, and the product's own
+    install image is searched automatically:
         *Licensing* / *AdskLicensing* / *DesktopLicensing*  -> ADLS
         *AdSSO* / *SingleSignOn*                            -> AdSSO
         *Genuine*                                           -> Genuine Service
         *WebView2*                                          -> Edge WebView2 (Microsoft)
 
-    This script never downloads anything. If a component is missing and no
-    installer was supplied, it prints exactly where to get the official one.
+    -AllowDownload (opt-in, off by default) fetches a missing ADLS from
+    Autodesk's CDN and the Edge WebView2 bootstrapper from Microsoft's servers,
+    and only uses a download whose Authenticode signature is valid and signed
+    by the vendor. Without the switch nothing is ever downloaded: the script
+    prints exactly where to get the official installer instead.
 
     Usage:
       .\Repair.ps1                                   # preview
+      .\Repair.ps1 -CheckOnly                        # report what is missing, exit
       .\Repair.ps1 -Apply                            # reset + verify
+      .\Repair.ps1 -Apply -AllowDownload             # fetch + install missing components
       .\Repair.ps1 -Apply -InstallerDir "D:\Installers"
       .\Repair.ps1 -Apply -AdlsInstaller "C:\...\Autodesk_Licensing_Service.exe"
       .\Repair.ps1 -Apply -WebView2Installer "C:\...\MicrosoftEdgeWebview2Setup.exe"
@@ -43,11 +48,17 @@ param(
     [string]$WebView2Installer,
     [string]$SilentArgs = '/S',
     [switch]$SkipReset,
-    [switch]$SkipConnectivity
+    [switch]$SkipConnectivity,
+    [switch]$AllowDownload,
+    [switch]$CheckOnly
 )
 
 $ErrorActionPreference = 'Continue'
 $ProgressPreference    = 'SilentlyContinue'
+
+# -CheckOnly answers one question ("which official components are missing?")
+# and never changes anything, so it forces preview even if -Apply was passed.
+if ($CheckOnly) { $Apply = $false }
 
 $script:Changes = 0
 $script:Errors  = 0
@@ -275,6 +286,20 @@ $genuineOk = [bool](@(
 ) | Where-Object { Test-Path -LiteralPath $_ })
 $wv2Ok = Test-Path -LiteralPath $wv2Key
 
+# -CheckOnly: report what is missing and exit before anything is touched or
+# searched. The GUI runs this first so a machine that has everything is never
+# sent to a "pick the folder with the installers" dialogue.
+if ($CheckOnly) {
+    $missingNames = @()
+    if (-not $adlsOk)    { $missingNames += 'ADLS' }
+    if (-not $adssOk)    { $missingNames += 'AdSSO' }
+    if (-not $genuineOk) { $missingNames += 'Genuine' }
+    if (-not $wv2Ok)     { $missingNames += 'WebView2' }
+    Write-Host ('CHECKRESULT missing=' + ($missingNames -join ','))
+    if ($script:LogPath) { try { Stop-Transcript | Out-Null } catch { } }
+    exit 0
+}
+
 # auto-detect in -InstallerDir (only for a component that is missing)
 if ((-not ($adlsOk -and $adssOk -and $genuineOk -and $wv2Ok)) -and $InstallerDir -and (Test-Path -LiteralPath $InstallerDir)) {
     # Get-ChildItem ignores a name -Include filter when the path comes from
@@ -312,8 +337,60 @@ if ($adlsOk -and $adssOk -and $genuineOk -and $wv2Ok) {
 }
 if ($AdlsInstaller -and -not $InstallerDir) { Info ('Found an official ADLS installer on this machine: ' + $AdlsInstaller) }
 
+# ---------------------------------------------------------------------------
+# Auto-fetch (opt-in): when a component is missing and no local installer was
+# supplied, fetch the official one - ADLS from Autodesk's CDN, the Edge
+# WebView2 bootstrapper from Microsoft - and refuse anything whose Authenticode
+# signature is not valid and signed by the vendor (Autodesk / Microsoft).
+# Without -AllowDownload nothing is ever downloaded.
+# ---------------------------------------------------------------------------
+function Get-OfficialInstaller {
+    param([string]$Label, [string]$Url, [string]$OutPath, [string]$SignerLike)
+    try {
+        if (-not (Test-Path -LiteralPath $OutPath)) {
+            Info ("{0}: downloading the official installer..." -f $Label)
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            Invoke-WebRequest -Uri $Url -OutFile $OutPath -UseBasicParsing -TimeoutSec 900
+        }
+        $f = Get-Item -LiteralPath $OutPath
+        Info ("{0}: {1} ({2:N1} MB)" -f $Label, $f.Name, ($f.Length / 1MB))
+        Info ("{0}: SHA256 {1}" -f $Label, (Get-FileHash -LiteralPath $OutPath -Algorithm SHA256).Hash)
+        $exe = $OutPath
+        if ($OutPath -match '\.zip$') {
+            Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction SilentlyContinue | Out-Null
+            $ex = $OutPath + '.expanded'
+            if (-not (Test-Path -LiteralPath $ex)) { [IO.Compression.ZipFile]::ExtractToDirectory($OutPath, $ex) }
+            $cand = @(Get-ChildItem -LiteralPath $ex -Recurse -File -ErrorAction SilentlyContinue |
+                      Where-Object { $_.Extension -eq '.exe' } | Select-Object -First 1)
+            if ($cand.Count -eq 0) { throw 'the archive does not contain an installer' }
+            $exe = $cand[0].FullName
+        }
+        $sig = Get-AuthenticodeSignature -LiteralPath $exe
+        if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch $SignerLike) {
+            throw ("signature check failed ({0}; signer: {1})" -f $sig.Status, $sig.SignerCertificate.Subject)
+        }
+        Info ("{0}: signature OK - {1}" -f $Label, $sig.SignerCertificate.Subject)
+        return $exe
+    } catch {
+        Write-Host ("  [WARN] {0}: automatic download failed - {1}" -f $Label, $_.Exception.Message) -ForegroundColor Yellow
+        return $null
+    }
+}
+
+if ($Apply -and $AllowDownload) {
+    $dlRoot = Join-Path $env:ProgramData 'UNLOCK DIGITAL\downloads'
+    New-Item -ItemType Directory -Force -Path $dlRoot | Out-Null
+    if (-not $adlsOk -and -not $AdlsInstaller) {
+        $AdlsInstaller = Get-OfficialInstaller -Label 'ADLS' -Url 'https://damassets.autodesk.net/content/dam/autodesk/www/files/AdskLicensingInstaller-win-17.0.0.16519.zip' -OutPath (Join-Path $dlRoot 'AdskLicensingInstaller-win-17.0.0.16519.zip') -SignerLike 'Autodesk'
+    }
+    if (-not $wv2Ok -and -not $WebView2Installer) {
+        $WebView2Installer = Get-OfficialInstaller -Label 'WebView2' -Url 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutPath (Join-Path $dlRoot 'MicrosoftEdgeWebview2Setup.exe') -SignerLike 'Microsoft'
+    }
+}
+
 # Where an official component comes from. This script installs only what it is
-# given and never downloads anything, so be explicit about the sources.
+# given (or hereby fetched with -AllowDownload), so be explicit about the
+# sources.
 function Show-ComponentSources {
     param([string]$What)
     Write-Host ("  {0} is missing and no installer was supplied. Official sources:" -f $What) -ForegroundColor Yellow
@@ -325,6 +402,7 @@ function Show-ComponentSources {
     Write-Host '    3) a Custom Install / Deployment folder -> point -InstallerDir at it' -ForegroundColor DarkGray
     Write-Host '    4) WebView2 is a Microsoft component:' -ForegroundColor DarkGray
     Write-Host '         https://developer.microsoft.com/microsoft-edge/webview2' -ForegroundColor DarkGray
+    Write-Host '    5) or re-run with -AllowDownload: ADLS and WebView2 are then fetched from the official servers' -ForegroundColor DarkGray
 }
 
 # An installer must never hang the repair (in the lab run the Edge WebView2
