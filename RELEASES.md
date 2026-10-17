@@ -1,5 +1,13 @@
 ﻿# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases
 
+## v1.4.0  (2026-10-17 19:48:20)
+
+Fixes the cleanup false positives from the 2026-10-17 machine trial: suspicious-name rules now need token boundaries (Cracked_Plaster.sbsar and DEPRECATED_Origin.maxcompound are safe), ProgramData\FLEXnet keeps its official service data and ProgramData\Autodesk\Adlm keeps the shipped ASR resources, and genuine env vars survive. The official FlexNet service (Flexera-signed) is accepted, UNDO restores environment variables, and the GUI Repair gains an opt-in auto-fetch checkbox (-AllowDownload) that downloads the official ADLS / WebView2 from Autodesk / Microsoft with Authenticode verification - plus -CheckOnly so a healthy machine is never asked for installer files.
+
+- `AdskDoctor-v1.4.0-Project.zip`  -  0.21 MB  -  SHA256 `70F5FC664989CB3C5F444A02B2A679971ADFB59D19DBA9D39CB7CB43F5DBC9AA`
+- `AdskDoctor-v1.4.0-Portable.zip`  -  0.18 MB  -  SHA256 `9F6AB60C95CE6BEE6BF07897575080B083B661820D6DD17299436AE9411AA6EA`
+- `UNLOCK-DIGITAL-AdskDoctor-Setup-1.4.0.exe`  -  2.13 MB  -  SHA256 `DE6AF8455502A38FC410A729AF070D856FF70909BF38B399BEE1BA2B1BF79615`
+
 ## v1.3.3  (2026-10-17 02:03:39)
 
 ### Changed
