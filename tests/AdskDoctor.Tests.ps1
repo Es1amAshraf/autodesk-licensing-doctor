@@ -466,6 +466,14 @@ Describe 'Field-gap guards' {
         $diag  | Should -Match 'trusted-storage'
     }
 
+    It 'accepts the official Flexera signature on the FlexNet service' {
+        # the FlexNet Licensing Service ships from Flexera; the trial flagged
+        # it as "signed but not by Autodesk" although that signature is the
+        # genuine vendor's
+        $diag = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
+        $diag | Should -Match 'Flexera-signed FlexNet component'
+    }
+
     It 'keeps product-installed environment variables and removes only fake licence pointers' {
         # the trial removed ADSK_3DSMAX_x64_2025 (installed by the 3ds Max
         # setup) with a blanket ADSK/AUTODESK/FLEXLM/LICPATH rule.
@@ -525,6 +533,17 @@ Describe 'Field-gap guards' {
         $repair | Should -Match 'already present - install skipped'
         $repair | Should -Match 'WaitForExit\('
         $repair | Should -Match 'still running after'
+    }
+
+    It 'the backup restores environment variables (the 2026-10-17 UNDO gap)' {
+        # the machine restore proved UNDO.ps1 never brought environment
+        # variables back: the clean-up had removed ADSK_3DSMAX_x64_2025 and
+        # nothing restored it. The generator now embeds an add-missing block.
+        $backup = Get-Content -LiteralPath (Join-Path $script:Root 'Backup.ps1') -Raw
+        $backup | Should -Match 'Restoring environment variables'
+        $backup | Should -Match 'GetEnvironmentVariable'
+        $backup | Should -Match 'SetEnvironmentVariable'
+        $backup | Should -Match 'state\\environment\.txt'
     }
 
     It 'the backup captures the loose crack files the clean-up deletes' {

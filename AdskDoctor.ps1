@@ -167,6 +167,13 @@ function Test-AutodeskSigned {
         'Valid' {
             if ($subject -match 'Autodesk') {
                 Add-Finding OK 'Signatures' ("Genuine (Autodesk-signed): {0}" -f $Label) $FilePath
+            } elseif ($subject -match 'Flexera' -and $Label -match 'flexnet') {
+                # The FlexNet Licensing Service (and its publisher files) ship
+                # from Flexera - the company behind FlexNet itself - so a
+                # Flexera signature on it is the genuine article, not a
+                # third-party binary. The 2026-10-17 machine trial flagged the
+                # official service as "signed but not by Autodesk".
+                Add-Finding OK 'Signatures' ("Genuine (Flexera-signed FlexNet component): {0}" -f $Label) $FilePath
             } else {
                 Add-Finding WARN 'Signatures' ("Signed but not by Autodesk: {0}" -f $Label) ($FilePath + ' | ' + $subject)
             }

@@ -302,7 +302,11 @@ try {
     $lines = @()
     foreach ($scope in @(@{n='Machine';d=[Environment]::GetEnvironmentVariables('Machine')},
                          @{n='User';d=[Environment]::GetEnvironmentVariables('User')})) {
-        foreach ($k in $scope.d.Keys) { $lines += ("{0}\t{1}\t{2}" -f $scope.n,$k,$scope.d[$k]) }
+        # Real tab separators. Earlier builds wrote a literal "\t" because a
+        # PowerShell double-quoted string does not translate backslash
+        # escapes - the 2026-10-17 machine restore skipped every env line
+        # for that reason.
+        foreach ($k in $scope.d.Keys) { $lines += ("{0}`t{1}`t{2}" -f $scope.n,$k,$scope.d[$k]) }
     }
     $lines | Set-Content -LiteralPath $envOut -Encoding UTF8
     Add-Item 'state' 'environment' $envOut 'ok'
@@ -382,6 +386,28 @@ if (Test-Path -LiteralPath `$def) {
             'Path'      { Add-MpPreference -ExclusionPath `$parts[1] -ErrorAction SilentlyContinue }
             'Extension' { Add-MpPreference -ExclusionExtension `$parts[1] -ErrorAction SilentlyContinue }
             'Process'   { Add-MpPreference -ExclusionProcess `$parts[1] -ErrorAction SilentlyContinue }
+        }
+    }
+}
+
+# Environment variables removed by a clean-up (a fake licence server points
+# them at localhost or a crack folder, or a blanket rule removes genuine ones)
+# are restored from the snapshot. Only variables that are missing are re-added,
+# and only the licensing-stack names are considered.
+`$envFile = Join-Path `$PSScriptRoot 'state\environment.txt'
+if (Test-Path -LiteralPath `$envFile) {
+    Write-Host 'Restoring environment variables...' -ForegroundColor Cyan
+    foreach (`$line in (Get-Content -LiteralPath `$envFile)) {
+        if ([string]::IsNullOrWhiteSpace(`$line)) { continue }
+        `$parts = `$line -split ([char]9), 3
+        if (`$parts.Count -lt 3) { `$parts = `$line -split '\\t', 3 }
+        if (`$parts.Count -lt 3) { continue }
+        `$scope = `$parts[0].Trim(); `$name = `$parts[1].Trim(); `$value = `$parts[2]
+        if (`$scope -notin @('Machine','User')) { continue }
+        if (`$name -notmatch '^(ADSK|AUTODESK|FLEXLM|LICPATH)') { continue }
+        if ([string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable(`$name, `$scope))) {
+            [Environment]::SetEnvironmentVariable(`$name, `$value, `$scope)
+            Write-Host ('  restored env var {0}:{1}' -f `$scope, `$name) -ForegroundColor Yellow
         }
     }
 }
