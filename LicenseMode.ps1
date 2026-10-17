@@ -19,6 +19,9 @@
                     RESET       no method registered; the product asks the
                                 user to choose at the next launch
 
+    USER and STANDALONE also clear any leftover license-server entries, so a
+    product that was stuck on a network setup comes back clean.
+
     Preview by default; add -Apply to make the change. It never downloads
     anything.
 
@@ -62,13 +65,27 @@ $script:Errors   = 0
 # not write one. ADSKDOCTOR_NOLOG=1 turns logging off (the test suite sets it).
 # ---------------------------------------------------------------------------
 $script:LogPath = $null
+$script:TranscriptOpen = $false
 if (-not $script:ListMode -and -not $env:ADSKDOCTOR_NOLOG) {
     try {
         $logRoot = if ($env:ADSKDOCTOR_LOGDIR) { $env:ADSKDOCTOR_LOGDIR } else { Join-Path $env:ProgramData 'UNLOCK DIGITAL\logs' }
         New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
         $script:LogPath = Join-Path $logRoot ('licensemode-{0}.log' -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
         Start-Transcript -LiteralPath $script:LogPath -Force | Out-Null
+        $script:TranscriptOpen = $true
     } catch { $script:LogPath = $null }
+}
+
+# PowerShell writes 'TerminatingError(): "System error."' into the transcript when
+# 'exit' runs while one is still open (PowerShell issue 26625), so every exit path
+# goes through this helper: the operation log is closed first and ends cleanly.
+function Exit-Doctor {
+    param([int]$Code)
+    if ($script:TranscriptOpen) {
+        $script:TranscriptOpen = $false
+        try { Stop-Transcript | Out-Null } catch { }
+    }
+    exit $Code
 }
 
 # ---------------------------------------------------------------------------
@@ -123,7 +140,8 @@ $script:ProductNames = @{
     'A9H' = 'PowerInspect Ultimate';      'A9J' = 'PowerInspect Premium'
     'A9L' = 'PowerShape Ultimate';        'A9M' = 'PowerShape Premium'
     'A9N' = 'PowerShape Standard';        'A9P' = 'PowerMill Ultimate'
-    'A9Q' = 'PowerMill Standard';         'C0T' = 'Flame'
+    'A9Q' = 'PowerMill Standard';         'C0P' = 'Arnold'
+    'C0T' = 'Flame'
     'C0U' = 'Lustre';                     'C0X' = 'Flame Premium'
     'C12' = 'HSM Premium';                'C13' = 'HSM Ultimate'
     '128' = '3ds Max';                    '208' = 'Inventor'
@@ -398,58 +416,58 @@ if (-not $script:ListMode) {
     Write-Host ("   Mode  : {0}" -f $(if ($Apply) { 'APPLY (will change the license type)' } else { 'PREVIEW (nothing changes)' })) -ForegroundColor $(if ($Apply) { 'Yellow' } else { 'Green' })
     Write-Host ("   Admin : {0}" -f $isAdmin)
     if ($script:LogPath) { Write-Host ("   Log   : {0}" -f $script:LogPath) -ForegroundColor DarkGray }
-    if ($Apply -and -not $isAdmin) { Write-Host '   ERROR: -Apply needs an administrator shell.' -ForegroundColor Red; exit 1 }
+    if ($Apply -and -not $isAdmin) { Write-Host '   ERROR: -Apply needs an administrator shell.' -ForegroundColor Red; Exit-Doctor 1 }
 }
 
 # --- locate the helper -----------------------------------------------------
 try { $script:Helper = Get-HelperPath } catch { $script:Helper = $null; $helperError = $_.Exception.Message }
 if (-not $script:Helper) {
     $msg = 'AdskLicensingInstHelper.exe was not found. The Autodesk licensing service (ADLS) is not installed on this PC - no 2020+ Autodesk product is.'
-    if ($Json) { Write-JsonError 'no-helper' $msg; exit 1 }
+    if ($Json) { Write-JsonError 'no-helper' $msg; Exit-Doctor 1 }
     Write-Host ''
     Warn-Line $msg
-    exit 1
+    Exit-Doctor 1
 }
 
 # --- listing ---------------------------------------------------------------
 if ($script:ListMode) {
     try { $products = @(Get-RegisteredProducts) }
     catch {
-        if ($Json) { Write-JsonError 'list-failed' $_.Exception.Message; exit 1 }
+        if ($Json) { Write-JsonError 'list-failed' $_.Exception.Message; Exit-Doctor 1 }
         Warn-Line $_.Exception.Message
-        exit 1
+        Exit-Doctor 1
     }
-    if ($Json) { Write-Output (ConvertTo-ProductJson $products); exit 0 }
+    if ($Json) { Write-Output (ConvertTo-ProductJson $products); Exit-Doctor 0 }
     Write-Host ''
     Write-Host '== Registered Autodesk products ==' -ForegroundColor Cyan
     Info ('Helper: ' + $script:Helper)
     if ($products.Count -eq 0) {
         Warn-Line 'No products are registered with the Autodesk licensing service.'
         Warn-Line 'Either nothing from 2020 on is installed, or the registration is missing - the Repair step re-registers the official components.'
-        exit 0
+        Exit-Doctor 0
     }
     Write-Host ''
     Write-ProductList $products
     Write-Host ''
     Info 'Switch one with: -ProductKey <key> -ProductVersion <version> -LicenseType USER|NETWORK|STANDALONE|RESET  (add -Apply to make the change)'
-    exit 0
+    Exit-Doctor 0
 }
 
 # --- switch ----------------------------------------------------------------
 if (-not $ProductKey -or -not $LicenseType) {
     Write-Host ''
     Write-Host '   ERROR: -ProductKey and -LicenseType are required (see the examples at the top of this script).' -ForegroundColor Red
-    exit 1
+    Exit-Doctor 1
 }
 
 try { $all = @(Get-RegisteredProducts) }
-catch { Write-Host ''; Warn-Line $_.Exception.Message; exit 1 }
+catch { Write-Host ''; Warn-Line $_.Exception.Message; Exit-Doctor 1 }
 
 if ($all.Count -eq 0) {
     Write-Host ''
     Warn-Line 'No products are registered with the Autodesk licensing service - nothing to switch.'
     Warn-Line 'Run the Repair step first if a product is installed but does not show up here.'
-    exit 1
+    Exit-Doctor 1
 }
 
 $match = @($all | Where-Object { $_.ProductKey -eq $ProductKey })
@@ -458,13 +476,13 @@ if ($match.Count -eq 0) {
     Write-Host ''
     Warn-Line ('Product ' + $ProductKey + ' is not registered on this PC. Registered products:')
     Write-ProductList $all
-    exit 1
+    Exit-Doctor 1
 }
 if ($match.Count -gt 1) {
     Write-Host ''
     Warn-Line ('More than one registered version matches ' + $ProductKey + ' - add -ProductVersion <version>:')
     Write-ProductList $match
-    exit 1
+    Exit-Doctor 1
 }
 $target = $match[0]
 
@@ -496,6 +514,8 @@ if ($LicenseType -eq 'NETWORK') {
     }
 } elseif ($LicenseType -eq 'RESET') {
     Info 'RESET: no method is registered, so the product asks the user to choose at the next launch.'
+} elseif ($LicenseType -eq 'USER' -or $LicenseType -eq 'STANDALONE') {
+    if ($target.Method -eq 'NETWORK') { Info 'Leftover license-server entries are cleared as part of this switch.' }
 }
 if ($target.Method -eq $LicenseType) {
     Warn-Line ('The product is already ' + (Format-MethodLabel $LicenseType) + ' - this re-applies it (and updates the server info if given).')
@@ -504,7 +524,7 @@ if ($target.Method -eq $LicenseType) {
 if (-not $Apply) {
     Write-Host ''
     Write-Host '  PREVIEW - nothing was changed. Run again with -Apply to switch the license type.' -ForegroundColor Green
-    exit 0
+    Exit-Doctor 0
 }
 
 # --- apply -----------------------------------------------------------------
@@ -554,7 +574,11 @@ switch ($LicenseType) {
             $changeLine += (' -lt "{0}" -ls "{1}"' -f $effectiveServerType, $effectiveServers)
         }
     }
-    default { $changeLine += (' -lm ' + $LicenseType) }
+    default {
+        # USER / STANDALONE also clear leftover license-server info (verified on
+        # the real helper: 'change -lm USER -lt "" -ls ""' removes the entries)
+        $changeLine += (' -lm ' + $LicenseType + ' -lt "" -ls ""')
+    }
 }
 
 Info ('Running: ' + (Split-Path -Leaf $script:Helper) + ' ' + $changeLine)
@@ -564,7 +588,7 @@ if ($changeText) { foreach ($line in ($changeText -split "\r?\n")) { if ($line.T
 if ($change.Code -ne 0) {
     Write-Host ''
     Write-Host ('  [FAIL] AdskLicensingInstHelper change exited {0} - the license type was NOT changed.' -f $change.Code) -ForegroundColor Red
-    exit 1
+    Exit-Doctor 1
 }
 
 Section 'Verify'
@@ -595,5 +619,5 @@ if ($LicenseType -eq 'USER') {
 } elseif ($LicenseType -eq 'NETWORK') {
     Write-Host '  Next: make sure the license server is reachable (NLM, TCP 2080/27000), then reopen the product.' -ForegroundColor Cyan
 }
-if ($script:Errors -gt 0) { exit 1 }
-exit 0
+if ($script:Errors -gt 0) { Exit-Doctor 1 }
+Exit-Doctor 0

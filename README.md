@@ -184,6 +184,8 @@ powershell -ExecutionPolicy Bypass -File .\LicenseMode.ps1 -List -Json   # for t
 # …and switch one product's license type (preview first!). USER = single-user
 # sign-in subscription; NETWORK = a license server; STANDALONE = legacy serial;
 # RESET only removes the stored choice, so the product asks again at next launch.
+# (USER and STANDALONE also clear leftover license-server entries from an older
+# network setup, so the product comes back clean.)
 powershell -ExecutionPolicy Bypass -File .\LicenseMode.ps1 -ProductKey 001Q1 -ProductVersion 2025.0.0.F -LicenseType USER
 powershell -ExecutionPolicy Bypass -File .\LicenseMode.ps1 -ProductKey 001Q1 -ProductVersion 2025.0.0.F -LicenseType USER -Apply
 

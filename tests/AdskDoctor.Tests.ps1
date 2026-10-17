@@ -695,7 +695,8 @@ if ($HelperArgs.Count -gt 0 -and $HelperArgs[0] -eq 'change') {
             if ($lm -eq '') { $p.lic_servers = @(); $p.lic_server_type = 0 }
             if ($HelperArgs -contains '-ls') {
                 $ls = $HelperArgs[[array]::IndexOf($HelperArgs, '-ls') + 1]
-                if ($ls) { $p.lic_servers = @($ls -split ',') }
+                # like the real helper: an empty -ls clears the stored server list
+                if ($ls) { $p.lic_servers = @($ls -split ',') } else { $p.lic_servers = @(); $p.lic_server_type = 0 }
             }
             if ($HelperArgs -contains '-lt') {
                 $lt = $HelperArgs[[array]::IndexOf($HelperArgs, '-lt') + 1]
@@ -703,6 +704,7 @@ if ($HelperArgs.Count -gt 0 -and $HelperArgs[0] -eq 'change') {
                     'SINGLE'      { $p.lic_server_type = 1 }
                     'REDUNDANT'   { $p.lic_server_type = 2 }
                     'DISTRIBUTED' { $p.lic_server_type = 3 }
+                    ''            { $p.lic_server_type = 0 }
                 }
             }
         }
@@ -766,7 +768,10 @@ exit 0
         $out = Invoke-ToolScript 'LicenseMode.ps1' @('-HelperPath', $script:LicStub, '-ProductKey', '829P1', '-ProductVersion', '2024.0.0.F', '-LicenseType', 'USER', '-Apply', '-NoProcessStop')
         $out | Should -Match 'Verified'
         (Get-LicProductState '829P1').lic_method | Should -Be 4
-        @(Get-LicCalls) | Should -Contain '[change] [-pk] [829P1] [-pv] [2024.0.0.F] [-lm] [USER]'
+        @(Get-LicCalls) | Should -Contain '[change] [-pk] [829P1] [-pv] [2024.0.0.F] [-lm] [USER] [-lt] [] [-ls] []'
+        # switching to USER also clears what a previous network setup left behind
+        (Get-LicProductState '829P1').lic_server_type | Should -Be 0
+        @((Get-LicProductState '829P1').lic_servers) -join ',' | Should -Be ''
     }
 
     It 'passes one license server through (single address -> single server)' {
@@ -790,6 +795,15 @@ exit 0
         $out | Should -Match 'reset'
         @(Get-LicCalls) | Should -Contain '[change] [-pk] [829P1] [-pv] [2024.0.0.F] [-lm] [] [-lt] [] [-ls] []'
         (Get-LicProductState '829P1').lic_method | Should -Be 0
+    }
+
+    It 'STANDALONE switches cleanly too and clears leftover server info' {
+        if (-not $script:IsAdmin) { Set-ItResult -Skipped -Because 'changing the license type needs an elevated shell'; return }
+        $out = Invoke-ToolScript 'LicenseMode.ps1' @('-HelperPath', $script:LicStub, '-ProductKey', '829P1', '-ProductVersion', '2024.0.0.F', '-LicenseType', 'STANDALONE', '-Apply', '-NoProcessStop')
+        $out | Should -Match 'Verified'
+        @(Get-LicCalls) | Should -Contain '[change] [-pk] [829P1] [-pv] [2024.0.0.F] [-lm] [STANDALONE] [-lt] [] [-ls] []'
+        (Get-LicProductState '829P1').lic_method | Should -Be 2
+        @((Get-LicProductState '829P1').lic_servers) -join ',' | Should -Be ''
     }
 
     It 'refuses an unknown product key without calling change' {
@@ -822,6 +836,10 @@ exit 0
             $null = Invoke-ToolScript 'LicenseMode.ps1' @('-HelperPath', $script:LicStub, '-ProductKey', '829P1', '-ProductVersion', '2024.0.0.F', '-LicenseType', 'USER')
             $logs = @(Get-ChildItem -LiteralPath $env:ADSKDOCTOR_LOGDIR -Filter 'licensemode-*.log' -ErrorAction SilentlyContinue)
             $logs.Count | Should -Be 1 -Because 'a preview/apply run is logged, a plain listing is not'
+            $text = Get-Content -LiteralPath $logs[0].FullName -Raw
+            $text | Should -Match 'PREVIEW'
+            $text | Should -Match 'transcript end'
+            $text | Should -Not -Match 'System error' -Because 'exit with an open transcript writes a fake error line (PowerShell issue 26625)'
         } finally {
             if ($null -ne $oldNoLog)  { $env:ADSKDOCTOR_NOLOG = $oldNoLog }  else { Remove-Item Env:\ADSKDOCTOR_NOLOG  -ErrorAction SilentlyContinue }
             if ($null -ne $oldLogDir) { $env:ADSKDOCTOR_LOGDIR = $oldLogDir } else { Remove-Item Env:\ADSKDOCTOR_LOGDIR -ErrorAction SilentlyContinue }
