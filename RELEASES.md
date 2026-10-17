@@ -1,5 +1,13 @@
 ﻿# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases
 
+## v1.5.1  (2026-10-17 21:54:47)
+
+Feedback from a real customer support bundle (2026-10-17): the diagnostic report now shows the registered license mode of every product (single-user / network / standalone / none); Repair handles a locked token cache calmly instead of printing raw PowerShell error blocks; and the cleanup log records the full path of removed crack files.
+
+- `AdskDoctor-v1.5.1-Project.zip`  -  0.22 MB  -  SHA256 `400DB70489088EAF4AE161E1B34110C95044D00FD2BBE52F51756D0A7328F039`
+- `AdskDoctor-v1.5.1-Portable.zip`  -  0.18 MB  -  SHA256 `8C78BE3F3990F7E04149444D4A6343761008E22C18A5E38ABDEAF623DD84D35B`
+- `UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.1.exe`  -  2.14 MB  -  SHA256 `7F6E7C63BADA0639BE60E501FE935B7F4D774D5FC7F8E0B5757BEEEB3FD05EDD`
+
 ## v1.5.0  (2026-10-17 20:45:17)
 
 Adds the in-app Updater: the new Update button (Update.ps1 -Check / -Download) reads the latest GitHub release, says when you are already on the newest version, otherwise downloads the Portable archive, verifies its SHA256 against the SHA256SUMS.txt from the release, then swaps every file (including the launcher exe) and relaunches the app. The Repair flow no longer needs the opt-in auto-fetch checkbox - pressing Repair components (apply) is the confirmation, and a missing official ADLS / WebView2 is fetched straight from Autodesk / Microsoft with Authenticode and SHA256 checks. The header drops the Download official products button, keeps Remove Autodesk completely, and the updater button is simply labelled Update. Update.ps1 ships in all three downloads next to the compiled launcher exe.

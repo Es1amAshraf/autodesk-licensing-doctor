@@ -583,6 +583,51 @@ if ($agentFile.Count) {
     Add-Finding WARN 'Licensing' 'Licensing agent not found (AdskLicensingAgent)' 'Part of the ADLS stack - reinstall ADLS with the official installer'
 }
 
+# --- registered license modes ----------------------------------------------
+# What the licensing service will hand each product at launch: single-user
+# (sign-in), network (NLM), standalone (serial), or no method at all (the
+# product asks at launch). This is what decides "the product opens on the
+# wrong licensing screen" - a customer support bundle (2026-10-17) carried
+# exactly that case and the report never showed the registered mode itself.
+# LicenseMode.ps1 owns the product-name tables, so it is asked for its JSON
+# listing instead of duplicating them here; it is read-only and needs no admin.
+$lmScript = Join-Path $PSScriptRoot 'LicenseMode.ps1'
+if ((Test-Path -LiteralPath $adskLicensingRoot) -and (Test-Path -LiteralPath $lmScript)) {
+    try {
+        $lmLine = @(& (Join-Path $PSHOME 'powershell.exe') -NoProfile -ExecutionPolicy Bypass -File $lmScript -List -Json 2>$null |
+                   Where-Object { ([string]$_).Trim() } | Select-Object -Last 1)
+        $lm = if ($lmLine.Count) { ([string]$lmLine[0]).Trim() | ConvertFrom-Json -ErrorAction Stop } else { $null }
+        if ($lm -and $lm.ok) {
+            $registered = @($lm.products)
+            if ($registered.Count -gt 0) {
+                foreach ($prod in $registered) {
+                    $label = [string]$prod.name
+                    if (-not $label) { $label = 'Autodesk product ' + [string]$prod.productKey }
+                    if ($prod.year) { $label = '{0} {1}' -f $label, $prod.year }
+                    $modeText = switch ([string]$prod.method) {
+                        'USER'       { 'single-user (sign-in)' }
+                        'NETWORK'    { 'network (NLM)' }
+                        'STANDALONE' { 'standalone (serial)' }
+                        'MSSA'       { 'MSSA' }
+                        default      { 'no method registered (the product asks at launch)' }
+                    }
+                    $modeDetail = ''
+                    if ([string]$prod.method -eq 'NETWORK' -and @($prod.servers).Count -gt 0) { $modeDetail = 'servers: ' + (@($prod.servers) -join ', ') }
+                    Add-Finding INFO 'Licensing' ('License mode: {0} ({1} / {2}) = {3}' -f $label, $prod.productKey, $prod.productVersion, $modeText) $modeDetail
+                }
+            } else {
+                Add-Finding INFO 'Licensing' 'No product is registered with the licensing service' 'A 2020+ product with no registration asks for its license type at launch - the Repair step re-registers the official components'
+            }
+        } elseif ($lm) {
+            Add-Finding INFO 'Licensing' 'License modes could not be read' ([string]$lm.error)
+        } else {
+            Add-Finding INFO 'Licensing' 'License modes could not be read' 'LicenseMode.ps1 returned no data'
+        }
+    } catch {
+        Add-Finding INFO 'Licensing' 'License modes could not be read' $_.Exception.Message
+    }
+}
+
 if (Test-Path -LiteralPath $adSSO) {
     Add-Finding OK 'Licensing' 'AdSSO (Single Sign-On) component present' $adSSO
     # report the newest binary version found in the folder (names differ by release)

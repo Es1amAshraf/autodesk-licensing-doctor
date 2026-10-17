@@ -312,6 +312,27 @@ Describe 'Regression guards' {
         $diag | Should -Match 'TLS 1\.2 is disabled'
     }
 
+    It 'shows the registered license mode of every product in the report' {
+        # a customer support bundle (2026-10-17) never said WHY Civil 3D opened
+        # on the standalone screen: the registered mode itself was not reported
+        $diag = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
+        $diag | Should -Match 'License mode: '
+        $diag | Should -Match 'LicenseMode\.ps1'
+    }
+
+    It 'a running product cannot spray raw Remove-Item errors through the repair log' {
+        # the same bundle showed WebServices.log held open by AutoCAD turning
+        # the token-cache step into eight red PowerShell error blocks
+        $repair = Get-Content -LiteralPath (Join-Path $script:Root 'Repair.ps1') -Raw
+        $repair | Should -Match 'Clear token cache.*SilentlyContinue'
+        $repair | Should -Match 'in use by a running Autodesk product'
+    }
+
+    It 'the cleanup says where a removed crack file lived, not only its name' {
+        $clean = Get-Content -LiteralPath (Join-Path $script:Root 'Clean.ps1') -Raw
+        $clean | Should -Match 'Remove crack file.*\$h\.FullName'
+    }
+
     It 'collects the licensing logs into a support bundle' {
         # the agent log names the exact licensing failure, and asking a customer
         # to find it by hand does not work

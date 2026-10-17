@@ -393,7 +393,7 @@ foreach ($root in @($commonFiles, (Join-Path $env:ProgramFiles 'Autodesk'))) {
     if (-not (Test-Path -LiteralPath $root)) { continue }
     $hits = @(Get-ChildItem -LiteralPath $root -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $suspName } | Select-Object -First 50)
     $fileHits += $hits.Count
-    foreach ($h in $hits) { $hp = $h.FullName; Step ("Remove crack file {0}" -f $h.Name) { Remove-Item -LiteralPath $hp -Force } }
+    foreach ($h in $hits) { $hp = $h.FullName; Step ("Remove crack file {0}" -f $h.FullName) { Remove-Item -LiteralPath $hp -Force } }
 }
 if ($fileHits -eq 0) { Write-Host '  no crack files' -ForegroundColor DarkGray }
 

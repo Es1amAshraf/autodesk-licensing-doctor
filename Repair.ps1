@@ -233,10 +233,22 @@ foreach ($extra in @('AdskAccessServiceHost')) {
 # 5. Clear sign-in token cache (forces clean re-authentication)
 # ---------------------------------------------------------------------------
 Section 'Sign-in token cache'
+$lockedCache = @()
 foreach ($p in @(
     (Join-Path $env:LOCALAPPDATA 'Autodesk\Web Services'),
     (Join-Path $env:APPDATA 'Autodesk\Web Services'))) {
-    if (Test-Path -LiteralPath $p) { $pp = $p; Step ("Clear token cache {0}" -f $p) { Remove-Item -LiteralPath $pp -Recurse -Force } }
+    if (Test-Path -LiteralPath $p) {
+        $pp = $p
+        # A running product (acad, revit...) keeps WebServices.log open. The
+        # locked files must not print raw Remove-Item error blocks - a customer
+        # support bundle (2026-10-17) showed eight of them, which reads as a
+        # broken repair. SilentlyContinue + one calm note instead.
+        Step ("Clear token cache {0}" -f $p) { Remove-Item -LiteralPath $pp -Recurse -Force -ErrorAction SilentlyContinue }
+        if (Test-Path -LiteralPath $pp) { $lockedCache += $pp }
+    }
+}
+if ($lockedCache.Count -gt 0) {
+    Info 'Some cache files are in use by a running Autodesk product - they clear after it is closed (or after a reboot).'
 }
 Info 'Products will ask you to sign in again after this.'
 
@@ -250,11 +262,14 @@ if (Test-Path -LiteralPath $agentLocal) {
     # the live profile is exactly "EBWebView", so any sibling with that prefix
     # is a stale copy and gets rebuilt on the next sign-in attempt.
     $eb = @(Get-ChildItem -LiteralPath $agentLocal -Recurse -Directory -Filter 'EBWebView*' -ErrorAction SilentlyContinue)
+    $ebLeft = @()
     foreach ($d in $eb) {
         $dp = $d.FullName
-        Step ("Clear sign-in window profile {0}" -f $dp) { Remove-Item -LiteralPath $dp -Recurse -Force }
+        Step ("Clear sign-in window profile {0}" -f $dp) { Remove-Item -LiteralPath $dp -Recurse -Force -ErrorAction SilentlyContinue }
+        if (Test-Path -LiteralPath $dp) { $ebLeft += $dp }
     }
     if ($eb.Count -eq 0) { Info 'No sign-in window profile found (nothing to clear)' }
+    elseif ($ebLeft.Count -gt 0) { Info 'Some sign-in profile files are in use by the licensing agent - they clear after the product is closed (or after a reboot).' }
 }
 
 # ---------------------------------------------------------------------------
