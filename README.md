@@ -126,12 +126,11 @@ report with hundreds of findings still reads as a short list of things to do.
 3. Keep all files in the same folder — the app calls the `.ps1` scripts sitting
    next to the `.exe`.
 
-Extra buttons in the top bar, next to the language toggle:
+Two extra buttons in the top bar, next to the language toggle:
 
-* **Download official products** — opens the official Autodesk download page.
 * **Remove Autodesk completely** — Phase 5: takes every Autodesk trace off the
   machine. It asks for confirmation twice and runs a backup first.
-* **Update tool** — checks GitHub for a newer official release (the only moment
+* **Update** — checks GitHub for a newer official release (the only moment
   the tool talks to GitHub, and only when you press it). Already on the latest
   version? It simply tells you so. Otherwise it downloads the release archive,
   verifies its SHA256 against the published `SHA256SUMS.txt`, copies the files

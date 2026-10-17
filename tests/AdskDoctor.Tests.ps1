@@ -651,15 +651,16 @@ Describe 'Full removal (Purge.ps1)' {
         $purge | Should -Match 'locked files usually clear after a reboot'
     }
 
-    It 'the UI carries the two top-bar buttons: download and full removal' {
+    It 'the header carries the update button and the kept full-removal button' {
         $gui = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor-GUI.ps1') -Raw
         $gui | Should -Match 'x:Name="BtnPurge"'
         $gui | Should -Match "T 'purgeText'"
         $gui | Should -Match "T 'purgeWarn'"
-        # the download button used to sit in the action panel (Height 38);
-        # it now lives in the header, in front of the language toggle
-        $gui | Should -Not -Match 'BtnDownload[^>]*Height="38"'
-        $gui | Should -Match 'BtnDownload[\s\S]{0,600}BtnPurge[\s\S]{0,600}BtnLang'
+        $gui | Should -Match 'x:Name="BtnUpdate"'
+        $gui | Should -Match 'BtnPurge[\s\S]{0,600}BtnUpdate[\s\S]{0,600}BtnLang'
+        # the "Download official products" header button was removed on request
+        $gui | Should -Not -Match 'x:Name="BtnDownload"'
+        $gui | Should -Not -Match "bDownload\s*="
     }
 }
 
@@ -958,7 +959,8 @@ Describe 'In-app GitHub updater' {
     It 'sits in the header next to the download / removal / language buttons' {
         $gui = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor-GUI.ps1') -Raw
         $gui | Should -Match 'x:Name="BtnUpdate"'
-        $gui | Should -Match 'BtnDownload[\s\S]{0,700}BtnPurge[\s\S]{0,700}BtnUpdate[\s\S]{0,700}BtnLang'
+        $gui | Should -Match 'BtnUpdate[\s\S]{0,700}BtnLang'
+        $gui | Should -Match "bUpdate\s*=\s*'Update'"
         @([regex]::Matches($gui, 'bUpdate\s*=')).Count        | Should -BeGreaterOrEqual 2
         @([regex]::Matches($gui, 'updateAvailable\s*=')).Count | Should -BeGreaterOrEqual 2
     }

@@ -77,9 +77,7 @@ $L = @{
     purgeApply    = 'إزالة أوتوديسك بالكامل (تنفيذ)'
     purgePreview  = 'إزالة أوتوديسك بالكامل (معاينة)'
     purgeMissing  = 'ملف الإزالة Purge.ps1 لسه مش موجود.'
-    bDownload     = 'تحميل البرامج الرسمية'
-    downloadTip   = 'افتح موقع أوتوديسك الرسمي لتحميل البرامج (بحساب الاشتراك)'
-    bUpdate       = 'تحديث الأداة'
+    bUpdate       = 'تحديث'
     updateTip     = 'يفحص على آخر إصدار على GitHub وينزّله ويثبته لو فيه جديد'
     updateTitle   = 'تحديث الأداة'
     updateMissing = 'ملف التحديث (Update.ps1) لسه مش موجود في المجلد ده.'
@@ -117,7 +115,7 @@ $L = @{
     repairPreview = 'إصلاح المكوّنات (معاينة)'
     repairMissing = 'ملف الإصلاح Repair.ps1 لسه مش موجود.'
     repairAskDir  = "عندك فولدر فيه المثبّتات الرسمية (ADLS / AdSSO / WebView2)؟`n`nنعم = اختار الفولدر`nلا  = كمّل من غيرهم"
-    fetchChk      = 'نزّل الناقص تلقائيًا من المصادر الرسمية (أونلاين)'
+    fetchChk      = 'نزّل المكوّنات الناقصة تلقائيًا (أونلاين)'
     fetchTip      = "لو مفعّل: الأداة بتنزّل أحدث نسخة رسمية من ADLS / WebView2 لما يكون ناقص (محتاج إنترنت).`nكل تنزيل بيتفحص توقيعه الرقمي (Autodesk / Microsoft) قبل الاستخدام.`nافتراضيًا: متوقف — الأداة مش بتنزّل أي حاجة من غير ما تفعّله."
     pickFolderTitle = 'اختَر فولدر المثبّتات الرسمية'
     noBackups     = 'مفيش نسخ احتياطية.'
@@ -174,9 +172,7 @@ $L = @{
     purgeApply    = 'Remove Autodesk completely (apply)'
     purgePreview  = 'Remove Autodesk completely (preview)'
     purgeMissing  = 'Purge.ps1 is not present yet.'
-    bDownload     = 'Download official products'
-    downloadTip   = 'Open the official Autodesk download page (sign in with your subscription)'
-    bUpdate       = 'Update tool'
+    bUpdate       = 'Update'
     updateTip     = 'Checks GitHub for the latest published release and installs it in place when a newer one exists'
     updateTitle   = 'Tool update'
     updateMissing = 'Update.ps1 is not present in this folder yet.'
@@ -214,7 +210,7 @@ $L = @{
     repairPreview = 'Repair components (preview)'
     repairMissing = 'Repair.ps1 is not present yet.'
     repairAskDir  = "Do you have a folder with the official installers (ADLS / AdSSO / WebView2)?`n`nYes = pick the folder`nNo  = continue without them"
-    fetchChk      = 'Auto-fetch missing from official sources (online)'
+    fetchChk      = 'Auto-fetch missing components (online)'
     fetchTip      = "When enabled, the tool downloads the latest official ADLS / WebView2 when a component is missing (needs internet).`nEvery download is Authenticode-verified (Autodesk / Microsoft) before it is used.`nDefault: off - nothing is downloaded unless you enable this."
     pickFolderTitle = 'Select the folder with the official installers'
     noBackups     = 'No backups found.'
@@ -287,8 +283,6 @@ function T { param([string]$k) $L[$script:lang][$k] }
           </StackPanel>
         </StackPanel>
         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
-          <Button x:Name="BtnDownload" Content="" Height="34" Padding="14,0" Margin="0,0,8,0"
-                  Background="#E41E2E" Foreground="White" FontWeight="SemiBold" BorderBrush="#E41E2E"/>
           <Button x:Name="BtnPurge" Content="" Height="34" Padding="14,0" Margin="0,0,8,0"
                   Background="#22252B" Foreground="#FF7A7A" BorderBrush="#7F1D1D" FontWeight="SemiBold"/>
           <Button x:Name="BtnUpdate" Content="" Height="34" Padding="14,0" Margin="0,0,8,0"
@@ -394,7 +388,7 @@ $LicServersBox   = $win.FindName('LicServersBox')
 $LicServersHint  = $win.FindName('LicServersHint')
 $ChkFetch        = $win.FindName('ChkFetch')
 $buttons    = @{}
-foreach ($n in 'BtnDiag','BtnBackup','BtnClean','BtnRepair','BtnUndo','BtnDownload','BtnPurge','BtnUpdate','BtnReport','BtnBundle','BtnLang','LicApply','LicRefresh') {
+foreach ($n in 'BtnDiag','BtnBackup','BtnClean','BtnRepair','BtnUndo','BtnPurge','BtnUpdate','BtnReport','BtnBundle','BtnLang','LicApply','LicRefresh') {
     $buttons[$n] = $win.FindName($n)
 }
 
@@ -436,8 +430,6 @@ function Apply-Language {
     $ChkFetch.ToolTip   = T 'fetchTip'
     $buttons['BtnUndo'].Content   = T 'bUndo'
     $buttons['BtnReport'].Content = T 'bReport'
-    $buttons['BtnDownload'].Content = T 'bDownload'
-    $buttons['BtnDownload'].ToolTip = T 'downloadTip'
     $buttons['BtnPurge'].Content = T 'bPurge'
     $buttons['BtnPurge'].ToolTip = T 'purgeTip'
     $buttons['BtnUpdate'].Content = T 'bUpdate'
@@ -848,8 +840,6 @@ $buttons['BtnBundle'].Add_Click({
         -Arguments @('-File', (Join-Path $here 'AdskDoctor.ps1'), '-Html', '-Export', (Join-Path $here 'report.html'), '-Bundle') `
         -OpenAfter $here
 })
-
-$buttons['BtnDownload'].Add_Click({ Start-Process 'https://manage.autodesk.com/products/all' })
 
 # ---------------------------------------------------------------------------
 # Update from GitHub (official releases only)
