@@ -101,7 +101,8 @@ $relDir    = Join-Path $root ("releases\v" + $Version)
 $setupExe  = Join-Path $relDir ("UNLOCK-DIGITAL-AdskDoctor-Setup-$Version.exe")
 $zipPort   = Join-Path $relDir ("AdskDoctor-v$Version-Portable.zip")
 $zipProj   = Join-Path $relDir ("AdskDoctor-v$Version-Project.zip")
-foreach ($f in @($setupExe, $zipPort, $zipProj)) {
+$sumsFile  = Join-Path $relDir 'SHA256SUMS.txt'
+foreach ($f in @($setupExe, $zipPort, $zipProj, $sumsFile)) {
     if (-not (Test-Path -LiteralPath $f)) { throw "Missing release artifact: $f" }
 }
 Write-Ok "Artifacts built."
@@ -171,7 +172,7 @@ Write-Step "Creating the GitHub release ..."
 $prevEAP = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
 try {
-    $ghOut = & gh release create $tag $setupExe $zipPort $zipProj `
+    $ghOut = & gh release create $tag $setupExe $zipPort $zipProj $sumsFile `
         --title "$tag" --notes-file $notesFile 2>&1
 } finally { $ErrorActionPreference = $prevEAP }
 $code = $LASTEXITCODE
