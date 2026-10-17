@@ -427,9 +427,61 @@ Describe 'Field-gap guards' {
         $diag   = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
         $clean  = Get-Content -LiteralPath (Join-Path $script:Root 'Clean.ps1')  -Raw
         $repair = Get-Content -LiteralPath (Join-Path $script:Root 'Repair.ps1') -Raw
-        $diag   | Should -Match '_orig\|patched\|licpath'
-        $clean  | Should -Match '_orig\|patched\|licpath'
+        foreach ($text in @($diag, $clean)) {
+            $text | Should -Match '_orig'
+            $text | Should -Match 'patched'
+            $text | Should -Match 'licpath'
+        }
         $repair | Should -Match 'EBWebView\*'
+    }
+
+    It 'never flags genuine shipped content as a crack name (the 2026-10-17 false positives)' {
+        # the trial pattern used plain substrings: "Cracked_Plaster.sbsar" (a
+        # substance texture) and "DEPRECATED_Origin.maxcompound" (a shipped
+        # compound) both matched, and Clean.ps1 deleted them on the real
+        # machine. The pattern now needs a token boundary on both sides and
+        # backup extensions must terminate the name.
+        $good = @('Cracked_Plaster.sbsar', 'DEPRECATED_Origin.maxcompound', 'materiallibrary4.log_2024')
+        $bad  = @('crack.exe', 'adskflex.ini', 'licpath.ini', 'setup.exe_orig', 'tool.patched.dll', 'backup.bak')
+        foreach ($file in @('AdskDoctor.ps1', 'Clean.ps1')) {
+            $text = Get-Content -LiteralPath (Join-Path $script:Root $file) -Raw
+            $m = [regex]::Match($text, "\`$suspName = '([^']+)'")
+            $m.Success | Should -BeTrue -Because "$file must keep a discoverable suspName pattern"
+            $pat = $m.Groups[1].Value
+            foreach ($n in $good) { ($n -match $pat) | Should -BeFalse -Because "$n is genuine product content" }
+            foreach ($n in $bad)  { ($n -match $pat) | Should -BeTrue  -Because "$n is crack-style tooling a clean-up should remove" }
+        }
+    }
+
+    It 'keeps FlexNet service data and shipped ADLM resources (the folder-level false positives)' {
+        # the same trial deleted the whole ProgramData\FLEXnet folder and the
+        # whole ProgramData\Autodesk\Adlm tree (which ships ASR activation
+        # resources with the products) as "leftovers".
+        $clean = Get-Content -LiteralPath (Join-Path $script:Root 'Clean.ps1') -Raw
+        $diag  = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
+        $clean | Should -Not -Match 'Remove leftover folder'
+        $clean | Should -Match 'FLEXnet holds only service data'
+        $clean | Should -Match 'ProductInformation\.pit'
+        $diag  | Should -Match 'Test-OfficialFlexNetService'
+        $diag  | Should -Match 'trusted-storage'
+    }
+
+    It 'keeps product-installed environment variables and removes only fake licence pointers' {
+        # the trial removed ADSK_3DSMAX_x64_2025 (installed by the 3ds Max
+        # setup) with a blanket ADSK/AUTODESK/FLEXLM/LICPATH rule.
+        $clean = Get-Content -LiteralPath (Join-Path $script:Root 'Clean.ps1') -Raw
+        $clean | Should -Match 'kept genuine-looking env var'
+        $clean | Should -Match 'SetEnvironmentVariable'
+    }
+
+    It 'reads IFEO Debugger values without terminating-error noise in transcripts' {
+        # the trial transcripts collected "TerminatingError(Get-ItemProperty)
+        # ... Property Debugger does not exist" for every IFEO key without a
+        # Debugger value.
+        foreach ($file in @('AdskDoctor.ps1', 'Clean.ps1')) {
+            $text = Get-Content -LiteralPath (Join-Path $script:Root $file) -Raw
+            $text | Should -Match "PSObject\.Properties\.Name -contains 'Debugger'"
+        }
     }
 
     It 'resolves unquoted paths with spaces so the genuine Genuine-Service entry is kept' {

@@ -126,6 +126,21 @@ function Get-PathSuspicion {
     return $null
 }
 
+# True when a genuine FlexNet licensing service is installed (a service whose
+# binary exists at a non-suspicious location). ProgramData\FLEXnet trusted-
+# storage data is written by this official service as well - the 2026-10-17
+# machine trial proved genuine licensing calls touch it - so the folder alone
+# must never be treated as crack evidence.
+function Test-OfficialFlexNetService {
+    $services = @(Get-CimInstance Win32_Service -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match 'flexnet|flexlm' })
+    foreach ($s in $services) {
+        $bin = Get-ExeFromCommandLine ([string]$s.PathName)
+        if ($bin -and (Test-Path -LiteralPath $bin) -and -not (Get-PathSuspicion $bin)) { return $true }
+    }
+    return $false
+}
+
 # Query a trustworthy internet clock via the HTTP "Date" header.
 function Get-InternetTime {
     foreach ($url in @('https://www.autodesk.com','https://www.microsoft.com')) {
@@ -851,14 +866,24 @@ if (Test-Path -LiteralPath $productRoot) {
 # 6. Crack leftovers / suspicious files
 # ===========================================================================
 Write-Section 'Crack leftovers'
+# ProgramData\FLEXnet holds FlexNet trusted-storage data that the OFFICIAL
+# service writes (the 2026-10-17 machine trial proved genuine licensing calls
+# touch it), so data files alone are normal. Only crack tooling makes the
+# folder a finding.
 $flexnet = Join-Path $env:ProgramData 'FLEXnet'
 if (Test-Path -LiteralPath $flexnet) {
-    $fn = @(Get-ChildItem -LiteralPath $flexnet -Force)
-    if ($fn.Count -gt 0) {
-        Add-Finding WARN 'Leftovers' ("ProgramData\FLEXnet present ({0} items) - fake license-server leftovers?" -f $fn.Count) $flexnet
-    } else {
+    $fn = @(Get-ChildItem -LiteralPath $flexnet -Force -ErrorAction SilentlyContinue)
+    $fnTool = @($fn | Where-Object { $_.Name -match '\.(exe|dll)$' })
+    if ($fnTool.Count -gt 0) {
+        Add-Finding BAD 'Leftovers' ("ProgramData\FLEXnet contains license-server tooling ({0})" -f (($fnTool | Select-Object -First 3).Name -join ', ')) $flexnet
+    } elseif ($fn.Count -eq 0) {
         # an empty folder is created by the official FlexNet service install
         Add-Finding OK 'Leftovers' 'ProgramData\FLEXnet folder is empty (benign - the official FlexNet service creates it)' $flexnet
+    } elseif (Test-OfficialFlexNetService) {
+        # trusted-storage data written by the official service - normal
+        Add-Finding OK 'Leftovers' ("ProgramData\FLEXnet holds FlexNet trusted-storage data ({0} items) - official service installed" -f $fn.Count) $flexnet
+    } else {
+        Add-Finding WARN 'Leftovers' ("ProgramData\FLEXnet present ({0} items) but no official FlexNet service - orphaned leftovers?" -f $fn.Count) $flexnet
     }
 } else { Add-Finding OK 'Leftovers' 'No ProgramData\FLEXnet leftovers' }
 
@@ -893,8 +918,12 @@ foreach ($loc in @(
 }
 foreach ($f in @($pit | Select-Object -First 5)) { Add-Finding INFO 'Leftovers' ('ProductInformation.pit - legacy licence cache (the Cleanup step resets it) - ' + $f.LastWriteTime) $f.FullName }
 
-# suspicious file names inside Autodesk trees
-$suspName = 'crack|keygen|licgen|xforce|xf-|adskflex|lmgrd|_orig|patched|licpath|\.bak$|\.old$'
+# Suspicious file names inside the Autodesk trees. Tokens need a non-alnum
+# boundary on both sides and backups need a real extension: plain substring
+# rules flagged genuine product content ("Cracked_Plaster.sbsar" - a
+# substance texture - and "DEPRECATED_Origin.maxcompound") in the 2026-10-17
+# machine trial.
+$suspName = '(?<![a-z0-9])(crack|keygen|licgen|xforce|adskflex|lmgrd|licpath|patched)(?![a-z0-9])|(?<![a-z0-9])xf-|_orig(?![a-z0-9])|\.(bak|old|orig)$'
 foreach ($root in @($commonFiles, $productRoot)) {
     if (Test-Path -LiteralPath $root) {
         $hits = @(Get-ChildItem -LiteralPath $root -Recurse -File -ErrorAction SilentlyContinue |
@@ -921,7 +950,10 @@ foreach ($ifeoRoot in $ifeoRoots) {
     if (-not (Test-Path -LiteralPath $ifeoRoot)) { continue }
     foreach ($k in @(Get-ChildItem -LiteralPath $ifeoRoot -ErrorAction SilentlyContinue)) {
         $dbg = $null
-        try { $dbg = [string](Get-ItemProperty -LiteralPath $k.PSPath -Name 'Debugger' -ErrorAction Stop).Debugger } catch {}
+        # read all properties without -Name: a key without a Debugger value
+        # raises a terminating error that pollutes the run transcript
+        $props = Get-ItemProperty -LiteralPath $k.PSPath -ErrorAction SilentlyContinue
+        if ($props -and ($props.PSObject.Properties.Name -contains 'Debugger')) { $dbg = [string]$props.Debugger }
         if (-not $dbg) { continue }
         $autodeskish = $k.PSChildName -match 'adsk|autodesk|genuine|flexnet|flexlm|licens'
         $suspicious  = Get-PathSuspicion $dbg

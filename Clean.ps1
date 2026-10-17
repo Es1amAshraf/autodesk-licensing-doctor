@@ -354,26 +354,48 @@ try {
 # 8. Crack leftovers / fake license server
 # ---------------------------------------------------------------------------
 Section 'Crack leftovers'
-$leftovers = @()
-foreach ($p in @(
-    (Join-Path $env:ProgramData 'FLEXnet'),
-    (Join-Path $env:ProgramData 'Autodesk\Web Services\Adlm'),
-    # The legacy ADLM licence cache (ProductInformation.pit). ADLS ignores it,
-    # a patched copy is a classic non-genuine activation leftover, and the
-    # backup layer restores it if the clean-up is rolled back.
-    (Join-Path $env:ProgramData 'Autodesk\Adlm'))) {
-    if (Test-Path -LiteralPath $p) { $leftovers += $p }
-}
-foreach ($p in $leftovers) { $pp = $p; Step ("Remove leftover folder {0}" -f $p) { Remove-Item -LiteralPath $pp -Recurse -Force } }
+# FlexNet service data: only crack tooling (binaries / fake-server config)
+# is removed. The trusted-storage data belongs to the official FlexNet
+# Licensing Service (it recreates it, and genuine licensing calls write it),
+# so the folder itself survives a clean-up.
+$flexnet = Join-Path $env:ProgramData 'FLEXnet'
+if (Test-Path -LiteralPath $flexnet) {
+    $flexTool = @(Get-ChildItem -LiteralPath $flexnet -File -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '\.(exe|dll)$|^licpath\.ini$|\.lic$|\.opt$' })
+    foreach ($t in $flexTool) { $tp = $t.FullName; Step ("Remove license-server tooling {0}" -f $t.Name) { Remove-Item -LiteralPath $tp -Force } }
+    if ($flexTool.Count -eq 0) { Write-Host '  FLEXnet holds only service data (left alone)' -ForegroundColor DarkGray }
+} else { Write-Host '  no FLEXnet leftovers' -ForegroundColor DarkGray }
 
-$suspName = 'crack|keygen|licgen|xforce|xf-|adskflex|lmgrd|_orig|patched|licpath|\.bak$'
+# Legacy ADLM data: reset only the licence-cache file (ProductInformation.pit).
+# The rest of the tree (ASR activation resources) ships with the products and
+# must survive a clean-up - the 2026-10-17 machine run deleted it by accident.
+$pitHits = @()
+foreach ($loc in @(
+    (Join-Path $env:ProgramData 'Autodesk\Adlm'),
+    (Join-Path $env:ProgramData 'Autodesk\CLM\LGS'),
+    $flexnet)) {
+    if (Test-Path -LiteralPath $loc) {
+        $pitHits += @(Get-ChildItem -LiteralPath $loc -Filter 'ProductInformation.pit' -Recurse -File -ErrorAction SilentlyContinue)
+    }
+}
+foreach ($f in $pitHits) { $fp = $f.FullName; Step ("Reset legacy licence cache {0}" -f $f.FullName) { Remove-Item -LiteralPath $fp -Force } }
+if ($pitHits.Count -eq 0) { Write-Host '  no legacy licence cache' -ForegroundColor DarkGray }
+
+# Suspicious file names inside the Autodesk trees. Tokens need a non-alnum
+# boundary on both sides and backups need a real extension: plain substring
+# rules flagged genuine product content ("Cracked_Plaster.sbsar" - a
+# substance texture - and "DEPRECATED_Origin.maxcompound") in the
+# 2026-10-17 machine trial and the clean-up deleted both.
+$suspName = '(?<![a-z0-9])(crack|keygen|licgen|xforce|adskflex|lmgrd|licpath|patched)(?![a-z0-9])|(?<![a-z0-9])xf-|_orig(?![a-z0-9])|\.(bak|old|orig)$'
 $commonFiles = Join-Path ${env:ProgramFiles(x86)} 'Common Files\Autodesk Shared'
+$fileHits = 0
 foreach ($root in @($commonFiles, (Join-Path $env:ProgramFiles 'Autodesk'))) {
     if (-not (Test-Path -LiteralPath $root)) { continue }
     $hits = @(Get-ChildItem -LiteralPath $root -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $suspName } | Select-Object -First 50)
+    $fileHits += $hits.Count
     foreach ($h in $hits) { $hp = $h.FullName; Step ("Remove crack file {0}" -f $h.Name) { Remove-Item -LiteralPath $hp -Force } }
 }
-if ($leftovers.Count -eq 0) { Write-Host '  no leftover folders' -ForegroundColor DarkGray }
+if ($fileHits -eq 0) { Write-Host '  no crack files' -ForegroundColor DarkGray }
 
 # ---------------------------------------------------------------------------
 # 9. Network License Manager (blocks 2026 products)
@@ -448,7 +470,10 @@ foreach ($ir in $ifeoRoots) {
     if (-not (Test-Path -LiteralPath $ir)) { continue }
     foreach ($k in @(Get-ChildItem -LiteralPath $ir -ErrorAction SilentlyContinue)) {
         $dbg = $null
-        try { $dbg = [string](Get-ItemProperty -LiteralPath $k.PSPath -Name 'Debugger' -ErrorAction Stop).Debugger } catch {}
+        # read all properties without -Name: a key without a Debugger value
+        # raises a terminating error that pollutes the run transcript
+        $props = Get-ItemProperty -LiteralPath $k.PSPath -ErrorAction SilentlyContinue
+        if ($props -and ($props.PSObject.Properties.Name -contains 'Debugger')) { $dbg = [string]$props.Debugger }
         if (-not $dbg) { continue }
         $name = $k.PSChildName
         if ($name -match 'adsk|autodesk|genuine|flexnet|flexlm|licens') {
@@ -493,15 +518,28 @@ Write-Host '  (cleared caches are regenerated automatically)' -ForegroundColor D
 # ---------------------------------------------------------------------------
 # 12. Suspicious environment variables
 # ---------------------------------------------------------------------------
+# Only variables whose VALUE points licensing at something fake are removed.
+# Product variables installed by Autodesk itself (for example
+# ADSK_3DSMAX_x64_2025 = "C:\Program Files\Autodesk\3ds Max 2025\") must
+# survive: the 2026-10-17 machine run removed one by accident and plugin
+# tooling reads it.
 Section 'Environment variables'
 $hv = @()
 foreach ($scope in @('Machine','User')) {
     $vars = [Environment]::GetEnvironmentVariables($scope)
     foreach ($k in $vars.Keys) {
-        if ($k -match 'ADSK|AUTODESK|FLEXLM|LICPATH') { $hv += [pscustomobject]@{ Scope=$scope; Name=$k } }
+        if ($k -notmatch 'ADSK|AUTODESK|FLEXLM|LICPATH') { continue }
+        $val = [string]$vars[$k]
+        $fakeServer = $val -match '(^|[@\s])(localhost|127\.0\.0\.1|::1)($|\b)'
+        $fakePath   = $val -match '\\appdata\\|\\temp\\|\\users\\|\\downloads\\|flexlm|adskflex|lmgrd|xf-|xforce|keygen'
+        if ($fakeServer -or $fakePath) {
+            $hv += [pscustomobject]@{ Scope=$scope; Name=$k; Value=$val }
+        } else {
+            Write-Host ("  note: kept genuine-looking env var {0}:{1}" -f $scope, $k) -ForegroundColor DarkGray
+        }
     }
 }
-foreach ($v in $hv) { $vn = $v.Name; $vs = $v.Scope; Step ("Remove env var {0}:{1}" -f $vs, $vn) { [Environment]::SetEnvironmentVariable($vn, $null, $vs) } }
+foreach ($v in $hv) { $vn = $v.Name; $vs = $v.Scope; $vv = $v.Value; Step ("Remove env var {0}:{1} = {2}" -f $vs, $vn, $vv) { [Environment]::SetEnvironmentVariable($vn, $null, $vs) } }
 if ($hv.Count -eq 0) { Write-Host '  none' -ForegroundColor DarkGray }
 
 # ---------------------------------------------------------------------------
