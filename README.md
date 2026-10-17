@@ -22,16 +22,16 @@ Windows 10 / 11 · GUI in **Arabic + English** · no installation required.
 
 | What | Link |
 |------|------|
-| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.4.0.exe` (2.13 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.4.0/UNLOCK-DIGITAL-AdskDoctor-Setup-1.4.0.exe) |
+| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.0.exe` (2.14 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.5.0/UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.0.exe) |
 | Portable `.zip` (no install) and full source | [releases page](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest) |
 | Always the newest release | <https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest> |
 
 SHA256 of the files above (also in `SHA256SUMS.txt` on the release page):
 
 ```text
-DE6AF8455502A38FC410A729AF070D856FF70909BF38B399BEE1BA2B1BF79615  UNLOCK-DIGITAL-AdskDoctor-Setup-1.4.0.exe
-9F6AB60C95CE6BEE6BF07897575080B083B661820D6DD17299436AE9411AA6EA  AdskDoctor-v1.4.0-Portable.zip
-70F5FC664989CB3C5F444A02B2A679971ADFB59D19DBA9D39CB7CB43F5DBC9AA  AdskDoctor-v1.4.0-Project.zip
+7CFA26F6063A6379453B5BB8693446EA1A46CC371829CCD55A7A98DA91C3078F  UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.0.exe
+1004980CCFA6C3652CFC81A90729E7BFF8B511EC3F9030AE17EEA9AA530E67BF  AdskDoctor-v1.5.0-Portable.zip
+86C868C6BBFD5AB0A38B197803F66A2A8FBFDEA4644E21762A566FCB16760B9A  AdskDoctor-v1.5.0-Project.zip
 ```
 
 See [Verify your download](#verify-your-download).
