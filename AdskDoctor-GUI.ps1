@@ -115,8 +115,6 @@ $L = @{
     repairPreview = 'إصلاح المكوّنات (معاينة)'
     repairMissing = 'ملف الإصلاح Repair.ps1 لسه مش موجود.'
     repairAskDir  = "عندك فولدر فيه المثبّتات الرسمية (ADLS / AdSSO / WebView2)؟`n`nنعم = اختار الفولدر`nلا  = كمّل من غيرهم"
-    fetchChk      = 'نزّل المكوّنات الناقصة تلقائيًا (أونلاين)'
-    fetchTip      = "لو مفعّل: الأداة بتنزّل أحدث نسخة رسمية من ADLS / WebView2 لما يكون ناقص (محتاج إنترنت).`nكل تنزيل بيتفحص توقيعه الرقمي (Autodesk / Microsoft) قبل الاستخدام.`nافتراضيًا: متوقف — الأداة مش بتنزّل أي حاجة من غير ما تفعّله."
     pickFolderTitle = 'اختَر فولدر المثبّتات الرسمية'
     noBackups     = 'مفيش نسخ احتياطية.'
     noUndo        = 'مفيش نسخ فيها UNDO.'
@@ -210,8 +208,6 @@ $L = @{
     repairPreview = 'Repair components (preview)'
     repairMissing = 'Repair.ps1 is not present yet.'
     repairAskDir  = "Do you have a folder with the official installers (ADLS / AdSSO / WebView2)?`n`nYes = pick the folder`nNo  = continue without them"
-    fetchChk      = 'Auto-fetch missing components (online)'
-    fetchTip      = "When enabled, the tool downloads the latest official ADLS / WebView2 when a component is missing (needs internet).`nEvery download is Authenticode-verified (Autodesk / Microsoft) before it is used.`nDefault: off - nothing is downloaded unless you enable this."
     pickFolderTitle = 'Select the folder with the official installers'
     noBackups     = 'No backups found.'
     noUndo        = 'No backups contain an UNDO.'
@@ -311,7 +307,6 @@ function T { param([string]$k) $L[$script:lang][$k] }
           <Button x:Name="BtnBackup" Content="" Height="40" Margin="0,0,0,6" FontSize="13"/>
           <Button x:Name="BtnClean"  Content="" Height="40" Margin="0,0,0,6" FontSize="13"/>
           <Button x:Name="BtnRepair" Content="" Height="40" Margin="0,0,0,6" FontSize="13"/>
-          <CheckBox x:Name="ChkFetch" Content="" FontSize="12" Foreground="#374151" Margin="2,0,0,10"/>
           <Button x:Name="BtnUndo"   Content="" Height="40" Margin="0,0,0,6" FontSize="13"/>
           <Separator Margin="0,6,0,6"/>
           <TextBlock x:Name="LicModeLabel" Text="License mode" FontSize="13" FontWeight="SemiBold" Foreground="#333" Margin="0,0,0,6"/>
@@ -386,7 +381,6 @@ $LicCurrent      = $win.FindName('LicCurrent')
 $LicModeLabel    = $win.FindName('LicModeLabel')
 $LicServersBox   = $win.FindName('LicServersBox')
 $LicServersHint  = $win.FindName('LicServersHint')
-$ChkFetch        = $win.FindName('ChkFetch')
 $buttons    = @{}
 foreach ($n in 'BtnDiag','BtnBackup','BtnClean','BtnRepair','BtnUndo','BtnPurge','BtnUpdate','BtnReport','BtnBundle','BtnLang','LicApply','LicRefresh') {
     $buttons[$n] = $win.FindName($n)
@@ -426,8 +420,6 @@ function Apply-Language {
     $buttons['BtnBackup'].Content = T 'bBackup'
     $buttons['BtnClean'].Content  = T 'bClean'
     $buttons['BtnRepair'].Content = T 'bRepair'
-    $ChkFetch.Content   = T 'fetchChk'
-    $ChkFetch.ToolTip   = T 'fetchTip'
     $buttons['BtnUndo'].Content   = T 'bUndo'
     $buttons['BtnReport'].Content = T 'bReport'
     $buttons['BtnPurge'].Content = T 'bPurge'
@@ -794,17 +786,17 @@ $buttons['BtnRepair'].Add_Click({
     if ($r -eq 'Yes') { $repairArgs += '-Apply' }
     if ($r -eq 'Yes') {
         # Ask the repair itself what is missing first: a healthy machine is
-        # never sent to a folder-picking dialogue, and when something is
-        # missing the auto-fetch option (checkbox) takes over.
+        # never sent to a folder-picking dialogue, and pressing Repair is all
+        # the confirmation the ADLS / WebView2 auto-fetch needs.
         $missing = Get-RepairCheck -RepairPath $repair
         if ($missing -eq '') {
             # everything is present - run straight away, no installer questions
-        } elseif ($missing -ne 'unknown' -and $ChkFetch.IsChecked -and $missing -match 'ADLS|WebView2') {
-            # the operator opted in: let Repair fetch the missing official
-            # components itself (signature-verified downloads)
+        } elseif ($missing -ne 'unknown' -and $missing -match 'ADLS|WebView2') {
+            # let Repair fetch the missing official components itself
+            # (signature-verified downloads from Autodesk / Microsoft)
             $repairArgs += '-AllowDownload'
         } else {
-            # something is missing and fetching is off (or cannot help for it):
+            # something is missing that auto-fetch cannot help with:
             # offer the local installer folder as before
             $q = [System.Windows.MessageBox]::Show((T 'repairAskDir'), (T 'repairTitle'), 'YesNo', 'Question')
             if ($q -eq 'Yes') {

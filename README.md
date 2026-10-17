@@ -148,12 +148,13 @@ customer has a sign-in subscription. (Autodesk's own "Desktop Licensing Support
 Tool" used to do this; it is no longer distributed, and this uses the same
 official helper underneath.)
 
-In the Repair flow, the **Auto-fetch missing from official sources** checkbox
-(off by default) lets the tool download a missing ADLS / WebView2 straight from
+In the Repair flow, when a missing component is the Autodesk licensing service
+(ADLS) or WebView2, the tool downloads the official installer straight from
 Autodesk / Microsoft — Authenticode-verified before use — instead of asking for
-installer files. And when nothing is missing, Repair no longer asks for any
-folder at all: it first checks read-only (`Repair.ps1 -CheckOnly`) and only
-prompts when there is actually something to install.
+installer files; pressing **Repair components (apply)** is all the confirmation
+needed. And when nothing is missing, Repair no longer asks for any folder at
+all: it first checks read-only (`Repair.ps1 -CheckOnly`) and only prompts when
+there is actually something to install.
 
 ---
 
@@ -225,15 +226,16 @@ powershell -ExecutionPolicy Bypass -File .\LicenseMode.ps1 -ProductKey 829P1 -Pr
 powershell -ExecutionPolicy Bypass -File .\LicenseMode.ps1 -ProductKey 829P1 -ProductVersion 2024.0.0.F -LicenseType RESET -Apply
 ```
 
-`Repair.ps1` **downloads nothing by default.** It installs the official
-components you give it, and when one is missing with no installer supplied it
-prints where to get the official one instead of inventing a source. With the
-opt-in `-AllowDownload` switch (the GUI has the matching checkbox, off by
-default) it fetches a missing ADLS / WebView2 straight from Autodesk's CDN and
-Microsoft's servers, and only after the Authenticode signature (Autodesk /
-Microsoft) checks out. `Purge.ps1` never downloads anything either — it only
-removes. `LicenseMode.ps1` never downloads anything either — it drives the
-official helper that already ships with the installed products.
+`Repair.ps1` **downloads nothing unless it is told to.** It installs the
+official components you give it, and when one is missing with no installer
+supplied it prints where to get the official one instead of inventing a source.
+With the `-AllowDownload` switch it fetches a missing ADLS / WebView2 straight
+from Autodesk's CDN and Microsoft's servers, and only after the Authenticode
+signature (Autodesk / Microsoft) checks out — the GUI passes this switch as
+soon as a missing piece is one of those two, so pressing **Repair components
+(apply)** is all the confirmation needed. `Purge.ps1` never downloads anything
+either — it only removes. `LicenseMode.ps1` never downloads anything either —
+it drives the official helper that already ships with the installed products.
 
 ---
 

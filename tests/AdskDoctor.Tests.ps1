@@ -558,8 +558,12 @@ Describe 'Field-gap guards' {
         $repair | Should -Match 'CHECKRESULT missing='
         $gui    | Should -Match 'CheckOnly'
         $gui    | Should -Match 'CHECKRESULT missing='
-        $gui    | Should -Match 'ChkFetch'
-        $gui    | Should -Match 'AllowDownload'
+        # 2026-10-17: the auto-fetch checkbox was dropped - pressing Repair is
+        # the confirmation, so the GUI passes -AllowDownload by itself when the
+        # missing pieces are ADLS / WebView2.
+        $gui    | Should -Not -Match 'ChkFetch'
+        $gui    | Should -Match "missing -match 'ADLS\|WebView2'"
+        $gui    | Should -Match "'-AllowDownload'"
     }
 
     It 'the backup restores environment variables (the 2026-10-17 UNDO gap)' {
