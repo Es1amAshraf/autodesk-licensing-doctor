@@ -79,6 +79,17 @@ $L = @{
     purgeMissing  = 'ملف الإزالة Purge.ps1 لسه مش موجود.'
     bDownload     = 'تحميل البرامج الرسمية'
     downloadTip   = 'افتح موقع أوتوديسك الرسمي لتحميل البرامج (بحساب الاشتراك)'
+    bUpdate       = 'تحديث الأداة'
+    updateTip     = 'يفحص على آخر إصدار على GitHub وينزّله ويثبته لو فيه جديد'
+    updateTitle   = 'تحديث الأداة'
+    updateMissing = 'ملف التحديث (Update.ps1) لسه مش موجود في المجلد ده.'
+    updateChecking    = 'بيفحص على آخر إصدار...'
+    updateDownloading = 'بينزّل الإصدار الجديد...'
+    updateUpToDate    = 'أنت على أحدث إصدار (v{0}).'
+    updateAvailable   = "فيه إصدار جديد: v{0}`nعندك دلوقتي: v{1}`n`nتنزّل وتحدّث حالاً؟"
+    updateReady       = 'تم تنزيل الإصدار v{0}. الأداة هتقفل وتفتح تاني لوحدها على الإصدار الجديد.'
+    updateFailed      = "التحديث فشل:`n"
+    updateOffline     = 'مش قادر يوصل لـ GitHub. اتأكد من الإنترنت وجرّب تاني.'
     bBundle       = 'حزمة الدعم (تقرير + لوجات)'
     bundleTip     = 'يعمل فحص ويجمع لوجات الترخيص مع التقرير في ملف ZIP واحد تبعته للدعم'
     tip           = 'نصيحة: ابدأ بـ «فحص الجهاز»، بعدين «نسخة احتياطية»، وبعدها «تنظيف» ثم «إصلاح». ولو منتج واقف على شاشة سيرفر الترخيص واشتراكك مستخدم واحد: استعمل «وضع الترخيص» وحوّله لـ«مستخدم واحد».'
@@ -165,6 +176,17 @@ $L = @{
     purgeMissing  = 'Purge.ps1 is not present yet.'
     bDownload     = 'Download official products'
     downloadTip   = 'Open the official Autodesk download page (sign in with your subscription)'
+    bUpdate       = 'Update tool'
+    updateTip     = 'Checks GitHub for the latest published release and installs it in place when a newer one exists'
+    updateTitle   = 'Tool update'
+    updateMissing = 'Update.ps1 is not present in this folder yet.'
+    updateChecking    = 'Checking for the latest version...'
+    updateDownloading = 'Downloading the new version...'
+    updateUpToDate    = 'You are on the latest version (v{0}).'
+    updateAvailable   = "New version available: v{0}`nYou have: v{1}`n`nDownload and update now?"
+    updateReady       = 'Version v{0} has been downloaded. The tool will close and reopen on the new version.'
+    updateFailed      = "Update failed:`n"
+    updateOffline     = 'Could not reach GitHub. Check the internet connection and try again.'
     bBundle       = 'Support bundle (report + logs)'
     bundleTip     = 'Scan, then collect the licensing logs with the report into one zip to send to support'
     tip           = 'Tip: start with "Scan this PC", then "Create backup", then "Clean this PC" and finally "Repair". Stuck on the license-server screen with a sign-in subscription? Use "License mode" and switch the product back to "Single-user".'
@@ -269,6 +291,8 @@ function T { param([string]$k) $L[$script:lang][$k] }
                   Background="#E41E2E" Foreground="White" FontWeight="SemiBold" BorderBrush="#E41E2E"/>
           <Button x:Name="BtnPurge" Content="" Height="34" Padding="14,0" Margin="0,0,8,0"
                   Background="#22252B" Foreground="#FF7A7A" BorderBrush="#7F1D1D" FontWeight="SemiBold"/>
+          <Button x:Name="BtnUpdate" Content="" Height="34" Padding="14,0" Margin="0,0,8,0"
+                  Background="#22252B" Foreground="#7AD1A0" BorderBrush="#1F5C3A" FontWeight="SemiBold"/>
           <Button x:Name="BtnLang" Content="English" Width="110" Height="34"
                   Background="#22252B" Foreground="White" BorderBrush="#3A3E46"/>
         </StackPanel>
@@ -370,7 +394,7 @@ $LicServersBox   = $win.FindName('LicServersBox')
 $LicServersHint  = $win.FindName('LicServersHint')
 $ChkFetch        = $win.FindName('ChkFetch')
 $buttons    = @{}
-foreach ($n in 'BtnDiag','BtnBackup','BtnClean','BtnRepair','BtnUndo','BtnDownload','BtnPurge','BtnReport','BtnBundle','BtnLang','LicApply','LicRefresh') {
+foreach ($n in 'BtnDiag','BtnBackup','BtnClean','BtnRepair','BtnUndo','BtnDownload','BtnPurge','BtnUpdate','BtnReport','BtnBundle','BtnLang','LicApply','LicRefresh') {
     $buttons[$n] = $win.FindName($n)
 }
 
@@ -416,6 +440,8 @@ function Apply-Language {
     $buttons['BtnDownload'].ToolTip = T 'downloadTip'
     $buttons['BtnPurge'].Content = T 'bPurge'
     $buttons['BtnPurge'].ToolTip = T 'purgeTip'
+    $buttons['BtnUpdate'].Content = T 'bUpdate'
+    $buttons['BtnUpdate'].ToolTip = T 'updateTip'
     $buttons['BtnBundle'].Content = T 'bBundle'
     $buttons['BtnBundle'].ToolTip = T 'bundleTip'
     $buttons['BtnLang'].Content   = T 'bLang'
@@ -824,6 +850,100 @@ $buttons['BtnBundle'].Add_Click({
 })
 
 $buttons['BtnDownload'].Add_Click({ Start-Process 'https://manage.autodesk.com/products/all' })
+
+# ---------------------------------------------------------------------------
+# Update from GitHub (official releases only)
+# ---------------------------------------------------------------------------
+# Runs Update.ps1 -Check / -Download synchronously (the archive is tiny, so at
+# most a few seconds) and reports through the status line + message boxes.
+# Up to date -> a plain "you are on the latest version" note. Newer -> confirm,
+# download, verify the SHA256, then hand over to the generated apply script: it
+# waits for this process to exit, copies the staged files over this folder and
+# reopens the app, so the window closes right after the hand-over.
+function Get-UpdateResult {
+    param([object[]]$Out)
+    $line = ''
+    foreach ($l in @($Out)) {
+        $s = [string]$l
+        if ($s -match '^UPDATERESULT ') { $line = $s.Trim(); break }
+    }
+    if (-not $line) { return $null }
+    $info = @{}
+    foreach ($m in [regex]::Matches($line, '(\w+)=(\S*)')) { $info[$m.Groups[1].Value] = $m.Groups[2].Value }
+    return $info
+}
+function Get-UpdateCheck {
+    param([string]$CurrentVersion)
+    $upd = Join-Path $here 'Update.ps1'
+    try {
+        $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $upd -Check -CurrentVersion $CurrentVersion 2>&1
+        return (Get-UpdateResult -Out $out)
+    } catch { return $null }
+}
+function Set-UpdateStatus {
+    param([string]$Text)
+    $StatusText.Text = $Text
+    # let WPF paint the line before the blocking network step starts
+    try { [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Render, [action]{}) } catch {}
+}
+function Stop-UpdateUi {
+    Set-Busy $false
+    $StatusText.Text = (T 'statusReady')
+}
+
+$buttons['BtnUpdate'].Add_Click({
+    if ($script:busy) { [System.Windows.MessageBox]::Show((T 'busyMsg'),'UNLOCK DIGITAL') | Out-Null; return }
+    $upd = Join-Path $here 'Update.ps1'
+    if (-not (Test-Path -LiteralPath $upd)) {
+        [System.Windows.MessageBox]::Show((T 'updateMissing'), (T 'updateTitle')) | Out-Null
+        return
+    }
+    Set-Busy $true
+    try {
+        Set-UpdateStatus (T 'updateChecking')
+        $check = Get-UpdateCheck -CurrentVersion $script:appVersion
+        if (-not $check -or $check['error']) {
+            $why = ''
+            if ($check -and $check['error']) { $why = $check['error'] }
+            Stop-UpdateUi
+            Add-Log ('>> ' + (T 'updateFailed') + $why)
+            [System.Windows.MessageBox]::Show(((T 'updateFailed') + $why), (T 'updateTitle')) | Out-Null
+            return
+        }
+        if ($check['available'] -ne '1') {
+            Stop-UpdateUi
+            Add-Log ('>> ' + ((T 'updateUpToDate') -f $check['latest']))
+            [System.Windows.MessageBox]::Show(((T 'updateUpToDate') -f $check['latest']), (T 'updateTitle')) | Out-Null
+            return
+        }
+        $q = [System.Windows.MessageBox]::Show(((T 'updateAvailable') -f $check['latest'], $check['current']), (T 'updateTitle'), 'YesNo', 'Question')
+        if ($q -ne 'Yes') { Stop-UpdateUi; return }
+        Set-UpdateStatus (T 'updateDownloading')
+        $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $upd -Download -CurrentVersion $script:appVersion 2>&1
+        $res = Get-UpdateResult -Out $out
+        if (-not $res -or -not $res['staged'] -or $res['error']) {
+            $why = 'unknown'
+            if ($res -and $res['error']) { $why = $res['error'] }
+            Stop-UpdateUi
+            Add-Log ('>> ' + (T 'updateFailed') + $why)
+            [System.Windows.MessageBox]::Show(((T 'updateFailed') + $why), (T 'updateTitle')) | Out-Null
+            return
+        }
+        # hand over to the detached apply script and close; the window stays
+        # "busy" so nothing else can be clicked until it goes away
+        Add-Log ('>> ' + ((T 'updateReady') -f $res['version']))
+        [System.Windows.MessageBox]::Show(((T 'updateReady') -f $res['version']), (T 'updateTitle')) | Out-Null
+        $applyArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $res['apply'],
+                       '-WaitPid', $PID, '-StagingDir', $res['staged'], '-TargetDir', $here,
+                       '-ExeName', 'UNLOCK-DIGITAL-AdskDoctor.exe')
+        Start-Process -FilePath 'powershell.exe' -ArgumentList $applyArgs -WindowStyle Hidden
+        $win.Close()
+    } catch {
+        Stop-UpdateUi
+        Add-Log ('! ' + $_.Exception.Message)
+        [System.Windows.MessageBox]::Show(((T 'updateFailed') + $_.Exception.Message), (T 'updateTitle')) | Out-Null
+    }
+})
 
 # Full removal: deliberately separate from the repair flow. It does not fix
 # anything - it removes every Autodesk trace so a fresh official copy can be

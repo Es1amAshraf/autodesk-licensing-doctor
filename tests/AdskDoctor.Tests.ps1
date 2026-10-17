@@ -953,3 +953,50 @@ exit 0
         $build | Should -Match "'LicenseMode\.ps1'"
     }
 }
+
+Describe 'In-app GitHub updater' {
+    It 'sits in the header next to the download / removal / language buttons' {
+        $gui = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor-GUI.ps1') -Raw
+        $gui | Should -Match 'x:Name="BtnUpdate"'
+        $gui | Should -Match 'BtnDownload[\s\S]{0,700}BtnPurge[\s\S]{0,700}BtnUpdate[\s\S]{0,700}BtnLang'
+        @([regex]::Matches($gui, 'bUpdate\s*=')).Count        | Should -BeGreaterOrEqual 2
+        @([regex]::Matches($gui, 'updateAvailable\s*=')).Count | Should -BeGreaterOrEqual 2
+    }
+
+    It 'stays offline until asked: nothing downloads without -Download' {
+        $upd = Get-Content -LiteralPath (Join-Path $script:Root 'Update.ps1') -Raw
+        $upd | Should -Match 'api\.github\.com/repos/'
+        $upd | Should -Match "'Es1amAshraf/autodesk-licensing-doctor'"
+        $upd | Should -Match '/releases/latest'
+        $upd | Should -Match 'if \(-not \$Download\)'
+        $upd | Should -Match 'browser_download_url'
+        $upd | Should -Not -Match 'http://'
+    }
+
+    It 'verifies the SHA256 of the archive against the release SHA256SUMS.txt' {
+        $upd = Get-Content -LiteralPath (Join-Path $script:Root 'Update.ps1') -Raw
+        $upd | Should -Match 'SHA256SUMS\.txt'
+        $upd | Should -Match 'Get-FileHash'
+        $upd | Should -Match 'SHA256 mismatch'
+    }
+
+    It 'replaces the running copy through a generated apply script that waits for the app to exit' {
+        $upd = Get-Content -LiteralPath (Join-Path $script:Root 'Update.ps1') -Raw
+        $upd | Should -Match 'apply-update\.ps1'
+        $upd | Should -Match 'Wait-Process'
+        $upd | Should -Match 'UNLOCK-DIGITAL-AdskDoctor\.exe'
+        $gui = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor-GUI.ps1') -Raw
+        $gui | Should -Match 'Get-UpdateCheck'
+        $gui | Should -Match 'UPDATERESULT'
+        $gui | Should -Match "'-WaitPid'"
+    }
+
+    It 'ships the updater and the compiled launcher exe in every download' {
+        $build = Get-Content -LiteralPath (Join-Path $script:Root 'Build-Release.ps1') -Raw
+        @([regex]::Matches($build, "'Update\.ps1'")).Count | Should -BeGreaterOrEqual 2
+        $build | Should -Match 'runtimePayload = @\(\$exe\)'
+        $build | Should -Match 'Copy-Item \$runtimePayload \$sPort'
+        $build | Should -Match 'Copy-Item \$runtimePayload \$sPayload'
+        $build | Should -Match 'Copy-Item \$exe \$sProj -Force'
+    }
+}
