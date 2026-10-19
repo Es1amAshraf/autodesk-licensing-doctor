@@ -580,10 +580,12 @@ Describe 'Field-gap guards' {
         $gui    | Should -Match 'CheckOnly'
         $gui    | Should -Match 'CHECKRESULT missing='
         # 2026-10-17: the auto-fetch checkbox was dropped - pressing Repair is
-        # the confirmation, so the GUI passes -AllowDownload by itself when the
-        # missing pieces are ADLS / WebView2.
+        # the confirmation, so the GUI passes -AllowDownload by itself for every
+        # component that has an official vendor download (v1.5.2).
         $gui    | Should -Not -Match 'ChkFetch'
-        $gui    | Should -Match "missing -match 'ADLS\|WebView2'"
+        $gui    | Should -Match '\$auto\s*=\s*@\(''ADLS'',''AdSSO'',''Identity'',''WebView2''\)'
+        $gui    | Should -Match '\$needManual'
+        $gui    | Should -Match '\$needAuto\.Count -gt 0'
         $gui    | Should -Match "'-AllowDownload'"
     }
 
@@ -637,6 +639,99 @@ Describe 'Field-gap guards' {
         # The '/S' style was silently ignored by this InstallBuilder package.
         $repair = Get-Content -LiteralPath (Join-Path $script:Root 'Repair.ps1') -Raw
         $repair | Should -Match '--mode unattended --unattendedmodeui none'
+    }
+}
+
+Describe 'v1.5.2 licensing repair (IBRAHIM case)' {
+    # 3ds Max 2023 on the customer machine failed with "License Startup Error"
+    # after a crack clean-up. These guards keep the fixes that make Repair
+    # handle that class of damage without asking for an installer folder.
+    BeforeAll {
+        $script:RepairSrc = Get-Content -LiteralPath (Join-Path $script:Root 'Repair.ps1') -Raw
+        $script:DiagSrc   = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
+        $script:GuiSrc    = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor-GUI.ps1') -Raw
+    }
+
+    It 'detects AdSSO where its official MSI installs it, not only the old Common Files layout' {
+        # The MSI's Directory table puts AdSSO.exe in
+        # <Program Files>\Autodesk\Autodesk AdSSO. The old check looked only at
+        # Common Files\Autodesk Shared\AdSSO and called a healthy machine broken.
+        foreach ($text in @($script:DiagSrc, $script:RepairSrc)) {
+            $text | Should -Match 'Autodesk\\Autodesk AdSSO'
+            $text | Should -Match 'AdSSO\.exe'
+        }
+        $script:RepairSrc | Should -Match 'AdpClientService\.exe'
+    }
+
+    It 'no longer treats the agent SSOClient.config as proof that AdSSO is installed' {
+        $script:DiagSrc | Should -Not -Match 'sign-in is handled by AdskLicensing'
+        $script:DiagSrc | Should -Match 'not needed by the 2024\+ products installed here'
+        $script:RepairSrc | Should -Match 'if \(-not \(Test-LegacyAdskProduct\)\) \{ return \$true \}'
+    }
+
+    It 'flags the activator pair that killed the IBRAHIM agent: a proxy DLL and ADSKLicenseAgent.exe' {
+        $script:DiagSrc | Should -Match 'ProxyDllNames'
+        $script:DiagSrc | Should -Match 'version\.dll'
+        $script:DiagSrc | Should -Match 'DLL-hijack proxy'
+        $script:DiagSrc | Should -Match 'Non-Autodesk licensing agent'
+        $script:RepairSrc | Should -Match 'Quarantine the non-Autodesk licensing file'
+        $script:RepairSrc | Should -Match 'UNLOCK DIGITAL\\quarantine'
+    }
+
+    It 'checks the licensing agent behind Current instead of any old build folder' {
+        $script:DiagSrc | Should -Match 'Join-Path \$curTarget'
+        $script:DiagSrc | Should -Match 'missing from Current'
+        $script:DiagSrc | Should -Match 'NOT Autodesk-signed'
+    }
+
+    It 'separates a failed official update from a planted unsigned stub' {
+        $script:DiagSrc | Should -Match 'Get-AdlsBuildInfo'
+        $script:DiagSrc | Should -Match 'incomplete - a licensing update did not finish'
+        $script:DiagSrc | Should -Match 'unsigned stub'
+        $script:RepairSrc | Should -Match 'NewerIncomplete'
+        $script:RepairSrc | Should -Match 'Genuine -and -not \$_.Complete'
+    }
+
+    It 'treats an Identity Manager folder without the exe as an unfinished install' {
+        $script:DiagSrc | Should -Match 'installation is incomplete \(AdskIdentityManager\.exe is missing\)'
+        $script:RepairSrc | Should -Match 'Get-IdentityManagerExe'
+    }
+
+    It 'stops the service, installs, then repairs Current (the order an ADLS update needs)' {
+        $script:RepairSrc | Should -Match "(?s)Section 'Stop licensing services'.*Section 'Official components'.*Section 'Licensing build folder'"
+        $script:RepairSrc | Should -Match 'AdskLicensingService before re-pointing Current'
+    }
+
+    It 'reports every auto-installable component to the GUI and never blocks on Genuine Service' {
+        $m = [regex]::Match($script:RepairSrc, '(?s)if \(\$CheckOnly\) \{(.*?)CHECKRESULT missing=')
+        $m.Success | Should -BeTrue
+        foreach ($tok in @('ADLS','AdSSO','Identity','WebView2')) {
+            $m.Groups[1].Value | Should -Match ("'" + $tok + "'")
+        }
+        # Genuine Service has no public download; missing it must not send the
+        # operator to a folder-picking dialogue (the IBRAHIM machine had none).
+        $m.Groups[1].Value | Should -Not -Match "'Genuine'"
+    }
+
+    It 'knows the official v1.5.2 sources (ADLS 17, AdSSO 2025, Identity UCT, WebView2)' {
+        $script:RepairSrc | Should -Match 'AdskLicensingInstaller-win-17\.0\.0\.16519\.zip'
+        $script:RepairSrc | Should -Match 'adsso_2025_64-bit-update_installer\.zip'
+        $script:RepairSrc | Should -Match 'AdskIdentityManager-UCT-Installer\.exe'
+        $script:RepairSrc | Should -Match 'LinkId=2124703'
+    }
+
+    It 'still finds a dangling Current junction so mklink does not fail' {
+        $script:RepairSrc | Should -Match 'A dangling junction is invisible to Test-Path'
+        $block = [regex]::Match($script:RepairSrc, '(?s)function Get-AdlsCurrent \{(.*?)\r?\n\}').Groups[1].Value
+        $block | Should -Match 'Get-Item -LiteralPath \$path -Force'
+        $block | Should -Not -Match 'if \(-not \(Test-Path -LiteralPath \$path\)\) \{ return'
+    }
+
+    It 'asks for a folder only when the component check itself fails' {
+        $script:GuiSrc | Should -Not -Match "missing -match 'ADLS\|WebView2'"
+        $script:GuiSrc | Should -Match '\$auto\s*=\s*@\(''ADLS'',''AdSSO'',''Identity'',''WebView2''\)'
+        $script:GuiSrc | Should -Match '\$needManual\s*=\s*@\('
+        $script:GuiSrc | Should -Match '\$needAuto\.Count -gt 0'
     }
 }
 

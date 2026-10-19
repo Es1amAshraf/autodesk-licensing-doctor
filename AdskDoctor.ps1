@@ -225,20 +225,89 @@ function Get-TreeFilesQuiet {
     return @($out)
 }
 
+# Facts about one numbered AdskLicensing build. 'Genuine' means at least one of
+# the three official binaries carries a valid Autodesk signature; 'Complete'
+# means the agent and service are both present (the two files the service needs
+# to start). A newer genuine-but-incomplete build is a failed update; a newer
+# build with no Autodesk-signed binary is a planted stub.
+function Get-AdlsBuildInfo {
+    param([System.IO.DirectoryInfo]$Dir)
+    $agent   = Join-Path $Dir.FullName 'AdskLicensingAgent\AdskLicensingAgent.exe'
+    $service = Join-Path $Dir.FullName 'AdskLicensingService\AdskLicensingService.exe'
+    $helper  = @((Join-Path $Dir.FullName 'helper\AdskLicensingInstHelper.exe'),
+                  (Join-Path $Dir.FullName 'AdskLicensingInstHelper.exe')) |
+               Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+    $signed = 0
+    foreach ($f in @($agent, $service, $helper)) {
+        if (-not $f -or -not (Test-Path -LiteralPath $f)) { continue }
+        $s = Get-AuthenticodeSignature -LiteralPath $f -ErrorAction SilentlyContinue
+        if ($s -and $s.Status -eq 'Valid' -and $s.SignerCertificate -and ($s.SignerCertificate.Subject -match 'Autodesk')) { $signed++ }
+    }
+    $hasAgent   = [bool](Test-Path -LiteralPath $agent)
+    $hasService = [bool](Test-Path -LiteralPath $service)
+    [pscustomobject]@{
+        Name     = $Dir.Name
+        Path     = $Dir.FullName
+        Version  = [version]$Dir.Name
+        Signed   = $signed
+        Genuine  = ($signed -gt 0)
+        Complete = ($hasAgent -and $hasService)
+        Usable   = ($signed -gt 0 -and $hasAgent -and $hasService)
+    }
+}
+
+# DLL names an activator drops next to the signed licensing binaries so Windows
+# loads the attacker's copy first. None belongs in the ADLS/AdSSO trees; the
+# matching fake agent is ADSKLicenseAgent.exe (the official one is
+# AdskLicensingAgent.exe). The IBRAHIM machine had exactly this pair, and the
+# agent died with 0xc0000006.
+$script:ProxyDllNames = @(
+    'version.dll','netapi32.dll','winmm.dll','userenv.dll','dbghelp.dll',
+    'mpr.dll','mswsock.dll','ws2_32.dll','secur32.dll','cryptbase.dll',
+    'wtsapi32.dll','profapi.dll','iphlpapi.dll','dwmapi.dll','uxtheme.dll'
+)
+
 function Scan-FolderSignatures {
-    param([string]$Root, [string]$Tag, [switch]$Strict)
+    param([string]$Root, [string]$Tag, [switch]$Strict, [string]$ActivePath)
     if (-not (Test-Path -LiteralPath $Root)) { return }
     $files = @(Get-TreeFilesQuiet -Path $Root |
                Where-Object { $script:SignatureExtensions -contains $_.Extension.ToLowerInvariant() })
     $checked  = 0
     $bad      = 0
     $unsigned = 0
+    $activeUnsigned = 0
+    $firstActiveUnsigned = $null
     foreach ($f in $files) {
         $checked++
+        $lower = $f.Name.ToLowerInvariant()
         $sig = Get-AuthenticodeSignature -LiteralPath $f.FullName
+        # A system DLL name inside the vendor's own licensing folder is a
+        # DLL-search-order hijack, not a dependency (report it even if the copy
+        # is Microsoft-signed - that is exactly how the hijack works).
+        if ($script:ProxyDllNames -contains $lower) {
+            Add-Finding BAD 'Signatures' ("DLL-hijack proxy in {0}: {1} (a Windows system DLL planted next to the licensing binaries)" -f $Tag, $f.Name) $f.FullName
+            $bad++
+            continue
+        }
+        # ADSKLicenseAgent.exe (all caps ADSK) is not an Autodesk name; only
+        # the fake activator binary is. AdskLicensingAgent.exe is genuine.
+        if ($f.Extension -eq '.exe' -and $lower -match '^adsk.*licenseagent\.exe$' -and $lower -ne 'adsklicensingagent.exe') {
+            Add-Finding BAD 'Signatures' ("Non-Autodesk licensing agent in {0}: {1} (an activator component - remove it; run Repair to restore ADLS)" -f $Tag, $f.Name) $f.FullName
+            $bad++
+            continue
+        }
         if ($sig.Status -in 'NotSigned','UnknownError') {
             $unsigned++
-            if ($Strict) { Add-Finding BAD 'Signatures' ("UNSIGNED in {0}: {1}" -f $Tag, $f.Name) $f.FullName; $bad++ }
+            if ($Strict) {
+                Add-Finding BAD 'Signatures' ("UNSIGNED in {0}: {1}" -f $Tag, $f.Name) $f.FullName
+                $bad++
+            } elseif ($ActivePath -and $f.FullName.StartsWith($ActivePath, [StringComparison]::OrdinalIgnoreCase)) {
+                # An unsigned file in the build that is actually running is
+                # not "an old leftover" - it is either a failed install or an
+                # injected binary. Warn instead of the old blanket INFO.
+                $activeUnsigned++
+                if (-not $firstActiveUnsigned) { $firstActiveUnsigned = $f.FullName }
+            }
         } elseif ($sig.Status -eq 'HashMismatch') {
             Add-Finding BAD 'Signatures' ("PATCHED binary in {0}: {1} (its signature no longer matches)" -f $Tag, $f.Name) $f.FullName
             $bad++
@@ -247,8 +316,10 @@ function Scan-FolderSignatures {
         }
     }
     if ($bad -eq 0) {
-        if ($unsigned -gt 0) {
-            Add-Finding INFO 'Signatures' ("{0} unsigned binary/binaries in {1} (no signature - nothing patched)" -f $unsigned, $Tag) ''
+        if ($activeUnsigned -gt 0) {
+            Add-Finding WARN 'Signatures' ("{0} unsigned binary/binaries in the active {1} build - not part of an official signed build; verify them" -f $activeUnsigned, $Tag) $firstActiveUnsigned
+        } elseif ($unsigned -gt 0) {
+            Add-Finding INFO 'Signatures' ("{0} unsigned binary/binaries in {1} (older build folders; no signature - nothing patched)" -f $unsigned, $Tag) ''
         } else {
             Add-Finding OK 'Signatures' ("All {0} binaries in {1} carry a valid signature" -f $checked, $Tag)
         }
@@ -498,13 +569,32 @@ try {
 Write-Section 'Licensing components (deep signature scan)'
 $commonFiles = Join-Path ${env:ProgramFiles(x86)} 'Common Files\Autodesk Shared'
 $adskLicensingRoot = Join-Path $commonFiles 'AdskLicensing'
-$adSSO = Join-Path $commonFiles 'AdSSO'
 
+# 'Current' is resolved before the signature scan so the scan can tell the
+# active build's unsigned files (a real problem) from old leftovers (noise).
+$curPath   = Join-Path $adskLicensingRoot 'Current'
+$curItem   = $null
+$curTarget = $null
+$curName   = $null
+$curIsLink = $false
+$builds    = @()
+$newestUsable = $null
 if (Test-Path -LiteralPath $adskLicensingRoot) {
-    $versions = @(Get-ChildItem -LiteralPath $adskLicensingRoot -Directory)
+    $curItem = Get-Item -LiteralPath $curPath -Force -ErrorAction SilentlyContinue
+    if ($curItem) {
+        $curIsLink = (($curItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)
+        $curTarget = @($curItem.Target)[0]
+        if ($curTarget) { $curTarget = $curTarget -replace '[\\/]+$', '' }
+        if ($curTarget) { $curName = Split-Path -Leaf $curTarget }
+    }
+    $versions = @(Get-ChildItem -LiteralPath $adskLicensingRoot -Directory -ErrorAction SilentlyContinue)
+    $builds = @($versions | Where-Object { $_.Name -match '^\d+(\.\d+)+$' } |
+                Sort-Object { [version]$_.Name } | ForEach-Object { Get-AdlsBuildInfo -Dir $_ })
+    $usable = @($builds | Where-Object { $_.Usable })
+    if ($usable.Count) { $newestUsable = $usable[-1] }
     if ($versions.Count -gt 0) {
         Add-Finding INFO 'Licensing' ('AdskLicensing versions: ' + (($versions.Name) -join ', ')) $adskLicensingRoot
-        Scan-FolderSignatures -Root $adskLicensingRoot -Tag 'AdskLicensing'
+        Scan-FolderSignatures -Root $adskLicensingRoot -Tag 'AdskLicensing' -ActivePath $curTarget
     } else { Add-Finding WARN 'Licensing' 'AdskLicensing folder exists but is empty' $adskLicensingRoot }
 } elseif ($adskInstalled) {
     Add-Finding BAD 'Licensing' 'AdskLicensing folder NOT found' ("Expected: " + $adskLicensingRoot)
@@ -520,20 +610,32 @@ if (Test-Path -LiteralPath $adskLicensingRoot) {
 # the official installer (Repair step). It is a floor, not a target.
 $AdlsBaseline = [version]'10.0.0.0'
 $adlsVersion  = $null
-$versionIni   = Join-Path $adskLicensingRoot 'version.ini'
-if (Test-Path -LiteralPath $versionIni) {
-    $raw = Get-Content -LiteralPath $versionIni -Raw -ErrorAction SilentlyContinue
-    if ($raw -match '(\d+\.\d+\.\d+(?:\.\d+)?)') { $adlsVersion = $matches[1] }
-}
-if (-not $adlsVersion -and (Test-Path -LiteralPath $adskLicensingRoot)) {
-    # the version sub-folders are named after the version; otherwise ask the service exe
-    $dirs = @(Get-ChildItem -LiteralPath $adskLicensingRoot -Directory -ErrorAction SilentlyContinue |
-              Where-Object { $_.Name -match '^\d+(\.\d+)+$' } | Sort-Object { [version]$_.Name } -Descending)
-    if ($dirs.Count) {
-        $adlsVersion = $dirs[0].Name
-    } else {
-        $svcExe = @(Get-ChildItem -LiteralPath $adskLicensingRoot -Recurse -File -Filter 'AdskLicensingService.exe' -ErrorAction SilentlyContinue | Select-Object -First 1)
-        if ($svcExe.Count) { $adlsVersion = $svcExe[0].VersionInfo.FileVersion }
+# Report the build the service actually runs (Current) first: "17.0.0.16519
+# installed" while Current still points at 15.1 made the old report look like
+# the newer build was in use. Fall back to the newest usable build, then to
+# version.ini / the service exe for an unusual layout.
+$curBuild = if ($curName) { @($builds | Where-Object { $_.Name -eq $curName }) | Select-Object -First 1 } else { $null }
+if ($curBuild -and $curBuild.Usable) {
+    $adlsVersion = $curBuild.Name
+} elseif ($newestUsable) {
+    $adlsVersion = $newestUsable.Name
+} elseif ($curName -match '^\d+(\.\d+)+$') {
+    $adlsVersion = $curName
+} else {
+    $versionIni = Join-Path $adskLicensingRoot 'version.ini'
+    if (Test-Path -LiteralPath $versionIni) {
+        $raw = Get-Content -LiteralPath $versionIni -Raw -ErrorAction SilentlyContinue
+        if ($raw -match '(\d+\.\d+\.\d+(?:\.\d+)?)') { $adlsVersion = $matches[1] }
+    }
+    if (-not $adlsVersion -and (Test-Path -LiteralPath $adskLicensingRoot)) {
+        $dirs = @(Get-ChildItem -LiteralPath $adskLicensingRoot -Directory -ErrorAction SilentlyContinue |
+                  Where-Object { $_.Name -match '^\d+(\.\d+)+$' } | Sort-Object { [version]$_.Name } -Descending)
+        if ($dirs.Count) {
+            $adlsVersion = $dirs[0].Name
+        } else {
+            $svcExe = @(Get-ChildItem -LiteralPath $adskLicensingRoot -Recurse -File -Filter 'AdskLicensingService.exe' -ErrorAction SilentlyContinue | Select-Object -First 1)
+            if ($svcExe.Count) { $adlsVersion = $svcExe[0].VersionInfo.FileVersion }
+        }
     }
 }
 if ($adlsVersion) {
@@ -550,33 +652,80 @@ if ($adlsVersion) {
 
 # --- ADLS 'Current' junction ------------------------------------------------
 # ADLS keeps every installed build side by side and points 'Current' at the
-# active one. An interrupted licensing-service update can leave that junction on
-# an older build than the newest installed one - a known cause of the generic
-# "Licensing error - An error occurred".
-$curPath = Join-Path $adskLicensingRoot 'Current'
-if (Test-Path -LiteralPath $curPath) {
-    $numbered = @(Get-ChildItem -LiteralPath $adskLicensingRoot -Directory -ErrorAction SilentlyContinue |
-                  Where-Object { $_.Name -match '^\d+(\.\d+)+$' } | Sort-Object { [version]$_.Name })
-    try {
-        $curItem = Get-Item -LiteralPath $curPath -Force -ErrorAction Stop
-        $curName = Split-Path -Leaf (@($curItem.Target)[0] -replace '[\\/]+$', '')
-        if ($curName -and $numbered.Count -and ($numbered.Name -contains $curName) -and $curName -ne $numbered[-1].Name) {
-            Add-Finding WARN 'Licensing' ("AdskLicensing 'Current' points at {0} while {1} is installed" -f $curName, $numbered[-1].Name) ($curPath + ' - check this if licensing fails, then reinstall the official licensing service (Repair step)')
-        } elseif ($curName) {
-            Add-Finding INFO 'Licensing' ("AdskLicensing 'Current' -> {0}" -f $curName) $curPath
-        }
-    } catch {}
+# active one. An activator replaces that junction with a real folder or points
+# it at a doctored old build; an interrupted update leaves it on the previous
+# build. Each case is a different failure and gets a different message.
+if (-not (Test-Path -LiteralPath $adskLicensingRoot)) {
+    # already reported above
+} elseif (-not $curItem) {
+    Add-Finding WARN 'Licensing' 'AdskLicensing\Current is missing' 'The licensing service cannot start - run the Repair step'
+} elseif (-not $curIsLink) {
+    Add-Finding WARN 'Licensing' 'AdskLicensing Current is a real folder, not the official junction' ($curPath + ' - an activator replaces the junction; the Repair step restores it')
+} elseif (-not $curName) {
+    Add-Finding WARN 'Licensing' 'AdskLicensing Current points nowhere (broken junction)' $curPath
+} else {
+    if (-not $curBuild) {
+        Add-Finding BAD 'Licensing' ("AdskLicensing Current points at a folder that is not an installed build: {0}" -f $curName) $curPath
+    } elseif (-not $curBuild.Genuine) {
+        Add-Finding BAD 'Licensing' ("AdskLicensing Current points at a NON-GENUINE build: {0}" -f $curName) ($curPath + ' - run the Repair step')
+    } elseif (-not $curBuild.Complete) {
+        Add-Finding BAD 'Licensing' ("AdskLicensing Current points at an INCOMPLETE build: {0}" -f $curName) ($curPath + ' - an interrupted update; run the Repair step')
+    } elseif ($newestUsable -and $curName -ne $newestUsable.Name) {
+        Add-Finding WARN 'Licensing' ("AdskLicensing 'Current' points at {0} while {1} is installed" -f $curName, $newestUsable.Name) ($curPath + ' - the Repair step re-points it; reinstall the official licensing service if licensing still fails')
+    } else {
+        Add-Finding INFO 'Licensing' ("AdskLicensing 'Current' -> {0}" -f $curName) $curPath
+    }
+}
+
+# A numbered build newer than the newest usable one is either a failed official
+# update (genuine but incomplete) or a planted unsigned stub. The old report
+# only compared names, so a half-installed build looked like the newest and a
+# re-point of Current at it would have broken licensing further.
+foreach ($b in @($builds | Where-Object { -not $_.Genuine })) {
+    Add-Finding BAD 'Licensing' ("AdskLicensing build {0} is not a genuine Autodesk build (unsigned stub)" -f $b.Name) $b.Path
+}
+if ($newestUsable) {
+    foreach ($b in @($builds | Where-Object { $_.Version -gt $newestUsable.Version -and $_.Genuine -and -not $_.Complete })) {
+        Add-Finding WARN 'Licensing' ("AdskLicensing build {0} is incomplete - a licensing update did not finish" -f $b.Name) ($b.Path + ' - run the Repair step to reinstall the official licensing service')
+    }
 }
 
 # --- licensing agent -------------------------------------------------------
 # The agent is NOT a Windows service in current ADLS releases: it is
 # AdskLicensingAgent.exe inside the AdskLicensing folder, started on demand.
-# Checking for a service of that name produced a false warning, so look for the
-# file (or the service, for very old releases).
-$agentFile = @(Get-ChildItem -LiteralPath $adskLicensingRoot -Recurse -File -Filter 'AdskLicensingAgent.exe' -ErrorAction SilentlyContinue | Select-Object -First 1)
+# The copy that matters is the one behind 'Current'. The old scan returned the
+# first recursive match, so on the IBRAHIM bundle it reported the agent in the
+# 10.2 build while the active 15.1/17 build could be missing it.
+$agentPath = $null
+$agentFromCurrent = $false
+if ($curTarget) {
+    $cand = Join-Path $curTarget 'AdskLicensingAgent\AdskLicensingAgent.exe'
+    if (Test-Path -LiteralPath $cand) { $agentPath = $cand; $agentFromCurrent = $true }
+}
+if (-not $agentPath -and (Test-Path -LiteralPath $adskLicensingRoot)) {
+    $cand = @($builds | Sort-Object Version -Descending |
+              ForEach-Object { Join-Path $_.Path 'AdskLicensingAgent\AdskLicensingAgent.exe' } |
+              Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1)
+    if ($cand.Count) { $agentPath = $cand[0] }
+}
+if (-not $agentPath -and (Test-Path -LiteralPath $adskLicensingRoot)) {
+    # Unusual layout - any signed-looking copy left on disk (junction skipped).
+    $cand = @(Get-TreeFilesQuiet -Path $adskLicensingRoot |
+              Where-Object { $_.Name -eq 'AdskLicensingAgent.exe' } | Select-Object -First 1)
+    if ($cand.Count) { $agentPath = $cand[0].FullName }
+}
 $agentSvc  = @(Get-CimInstance Win32_Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'AdskLicensingAgent' })
-if ($agentFile.Count) {
-    Add-Finding OK 'Licensing' 'Licensing agent present (AdskLicensingAgent.exe)' $agentFile[0].FullName
+if ($agentPath) {
+    $asig = Get-AuthenticodeSignature -LiteralPath $agentPath -ErrorAction SilentlyContinue
+    if ($asig -and $asig.Status -eq 'Valid' -and $asig.SignerCertificate -and ($asig.SignerCertificate.Subject -match 'Autodesk')) {
+        if ($agentFromCurrent -or -not $curTarget) {
+            Add-Finding OK 'Licensing' 'Licensing agent present (AdskLicensingAgent.exe)' $agentPath
+        } else {
+            Add-Finding WARN 'Licensing' 'Licensing agent is missing from Current (only an older build has it)' ($agentPath + ' - reinstall the official licensing service (Repair step)')
+        }
+    } else {
+        Add-Finding BAD 'Licensing' ("Licensing agent is NOT Autodesk-signed ({0})" -f $asig.Status) ($agentPath + ' - patched/cracked licensing stack; run the Repair step')
+    }
 } elseif ($agentSvc.Count) {
     Add-Finding OK 'Licensing' ("Licensing agent present (service {0})" -f $agentSvc[0].Name) ''
 } elseif (Test-Path -LiteralPath $adskLicensingRoot) {
@@ -628,30 +777,57 @@ if ((Test-Path -LiteralPath $adskLicensingRoot) -and (Test-Path -LiteralPath $lm
     }
 }
 
-if (Test-Path -LiteralPath $adSSO) {
-    Add-Finding OK 'Licensing' 'AdSSO (Single Sign-On) component present' $adSSO
-    # report the newest binary version found in the folder (names differ by release)
-    $ssoBest = $null
-    foreach ($e in @(Get-ChildItem -LiteralPath $adSSO -Recurse -File -Filter '*.exe' -ErrorAction SilentlyContinue)) {
-        $v = $null
-        try { $v = [version]$e.VersionInfo.FileVersion } catch {}
-        if ($v -and (-not $ssoBest -or $v -gt $ssoBest.Version)) {
-            $ssoBest = [pscustomobject]@{ Version = $v; Text = $e.VersionInfo.FileVersion; Path = $e.FullName; Name = $e.Name }
+# --- AdSSO (Single Sign-On, 2020-2023 products) ----------------------------
+# The MSI installs AdSSO.exe to <Program Files>\Autodesk\Autodesk AdSSO, NOT
+# to Common Files\Autodesk Shared\AdSSO (a very old layout). Checking only the
+# old path reported "not installed" on machines that had it, and treating the
+# licensing agent's SSOClient.config as a substitute reported "present" on a
+# 3ds Max 2023 machine that still could not sign in.
+$adssOBase = @(
+    (Join-Path $env:ProgramFiles 'Autodesk\Autodesk AdSSO'),
+    (Join-Path ${env:ProgramFiles(x86)} 'Autodesk\Autodesk AdSSO'),
+    (Join-Path $commonFiles 'AdSSO')
+)
+$adssODir = @($adssOBase | Where-Object {
+    (Test-Path -LiteralPath (Join-Path $_ 'AdSSO.exe')) -or
+    (Test-Path -LiteralPath (Join-Path $_ 'AdSSOClient.dll')) -or
+    (Test-Path -LiteralPath (Join-Path $_ 'AdpClientService.exe'))
+}) | Select-Object -First 1
+if (-not $adssODir) {
+    # a folder with no binaries is an interrupted install, still worth naming
+    $adssODir = @($adssOBase | Where-Object { Test-Path -LiteralPath $_ }) | Select-Object -First 1
+}
+if ($adssODir) {
+    $hasBinary = @('AdSSO.exe','AdSSOClient.dll','AdpClientService.exe' |
+                   Where-Object { Test-Path -LiteralPath (Join-Path $adssODir $_) })
+    if ($hasBinary.Count) {
+        Add-Finding OK 'Licensing' 'AdSSO (Single Sign-On) component present' $adssODir
+        # report the newest binary version found in the folder (names differ by release)
+        $ssoBest = $null
+        foreach ($e in @(Get-ChildItem -LiteralPath $adssODir -Recurse -File -Filter '*.exe' -ErrorAction SilentlyContinue)) {
+            $v = $null
+            try { $v = [version]$e.VersionInfo.FileVersion } catch {}
+            if ($v -and (-not $ssoBest -or $v -gt $ssoBest.Version)) {
+                $ssoBest = [pscustomobject]@{ Version = $v; Text = $e.VersionInfo.FileVersion; Path = $e.FullName; Name = $e.Name }
+            }
+        }
+        if ($ssoBest) { Add-Finding INFO 'Licensing' ("AdSSO version: {0} ({1})" -f $ssoBest.Text, $ssoBest.Name) $ssoBest.Path }
+        Scan-FolderSignatures -Root $adssODir -Tag 'AdSSO'
+    } else {
+        Add-Finding WARN 'Licensing' 'AdSSO folder exists but holds no binaries (an install did not finish)' ($adssODir + ' - run the Repair step')
+    }
+} elseif ($adskInstalled) {
+    $legacy = @()
+    foreach ($root in @((Join-Path $env:ProgramFiles 'Autodesk'), (Join-Path ${env:ProgramFiles(x86)} 'Autodesk'))) {
+        if (Test-Path -LiteralPath $root) {
+            $legacy += @(Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
+                         Where-Object { $_.Name -match '\b20(20|21|22|23)\b' })
         }
     }
-    if ($ssoBest) { Add-Finding INFO 'Licensing' ("AdSSO version: {0} ({1})" -f $ssoBest.Text, $ssoBest.Name) $ssoBest.Path }
-    Scan-FolderSignatures -Root $adSSO -Tag 'AdSSO'
-} elseif ($adskInstalled) {
-    # Newer releases ship the sign-in client inside the licensing service
-    # (AdskLicensingAgent holds SSOClient.config + AdSkIdentitySDK.config), so a
-    # missing standalone AdSSO folder is not a defect there - it was reported as
-    # a warning on machines that sign in perfectly well.
-    $ssoInAdls = @(Get-ChildItem -LiteralPath $adskLicensingRoot -Recurse -File -ErrorAction SilentlyContinue |
-                   Where-Object { $_.Name -in 'SSOClient.config','AdSkIdentitySDK.config' })
-    if ($ssoInAdls.Count) {
-        Add-Finding INFO 'Licensing' 'Standalone AdSSO not installed - sign-in is handled by AdskLicensing' $ssoInAdls[0].FullName
+    if ($legacy.Count) {
+        Add-Finding WARN 'Licensing' 'AdSSO component not found (needed by the 2020-2023 products installed here)' ("Expected: " + (Join-Path $env:ProgramFiles 'Autodesk\Autodesk AdSSO') + ' - the Repair step installs it')
     } else {
-        Add-Finding WARN 'Licensing' 'AdSSO component not found' ("Expected: " + $adSSO + ' - single-user sign-in needs it')
+        Add-Finding INFO 'Licensing' 'Standalone AdSSO not installed - not needed by the 2024+ products installed here' ''
     }
 } else {
     Add-Finding INFO 'Licensing' 'AdSSO is not installed' 'No Autodesk product is installed on this machine'
@@ -678,7 +854,13 @@ if ($wv2.Count) {
     $pv = (Get-ItemProperty -LiteralPath $wv2[0].PSPath -ErrorAction SilentlyContinue).pv
     Add-Finding OK 'Licensing' ('Microsoft Edge WebView2 runtime present ({0})' -f $pv) ($wv2[0].PSPath -replace 'Microsoft\.PowerShell\.Core\\Registry::', '')
 } else {
-    $wv2Exe = @(Get-ChildItem -LiteralPath (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\EdgeWebView\Application') -Recurse -File -Filter 'msedgewebview2.exe' -ErrorAction SilentlyContinue | Select-Object -First 1)
+    $wv2Exe = @()
+    foreach ($wv2Root in @((Join-Path ${env:ProgramFiles(x86)} 'Microsoft\EdgeWebView\Application'),
+                           (Join-Path $env:ProgramFiles 'Microsoft\EdgeWebView\Application'))) {
+        if (Test-Path -LiteralPath $wv2Root) {
+            $wv2Exe += @(Get-ChildItem -LiteralPath $wv2Root -Recurse -File -Filter 'msedgewebview2.exe' -ErrorAction SilentlyContinue | Select-Object -First 1)
+        }
+    }
     if ($wv2Exe.Count) {
         Add-Finding OK 'Licensing' 'Microsoft Edge WebView2 runtime present' $wv2Exe[0].FullName
     } else {
@@ -687,22 +869,32 @@ if ($wv2.Count) {
 }
 
 # --- identity component -----------------------------------------------------
-# 2020+ products sign in through Autodesk Identity Manager, which is a separate
-# component from ADLS. Without it the sign-in flow cannot complete.
-# the official installer puts the exe either straight inside the folder or
-# one level down in a version folder (e.g. ...\AdskIdentityManager\1.19.2.0\)
-$idm = @(
+# 2024+ products sign in through Autodesk Identity Manager; 2020-2023 use the
+# standalone AdSSO above. The folder existing is not enough: the IBRAHIM
+# machine had ...\Autodesk\AdskIdentityManager but AdskIdentityManager.exe was
+# missing, so an interrupted install must be reported as such.
+$idmDirs = @(
     (Join-Path $env:ProgramFiles 'Autodesk\AdskIdentityManager'),
     (Join-Path ${env:ProgramFiles(x86)} 'Autodesk\AdskIdentityManager')
-) | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object {
+) | Where-Object { Test-Path -LiteralPath $_ }
+# the official installer puts the exe either straight inside the folder or
+# one level down in a version folder (e.g. ...\AdskIdentityManager\1.19.2.0\)
+$idm = @($idmDirs | ForEach-Object {
     Join-Path $_ 'AdskIdentityManager.exe'
     Get-ChildItem -LiteralPath $_ -Directory -ErrorAction SilentlyContinue |
         ForEach-Object { Join-Path $_.FullName 'AdskIdentityManager.exe' }
-} | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
-if ($idm) {
-    Add-Finding OK 'Licensing' ('Identity component present (version {0})' -f (Get-Item -LiteralPath $idm).VersionInfo.FileVersion) $idm
+} | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1)
+if ($idm.Count) {
+    $isig = Get-AuthenticodeSignature -LiteralPath $idm[0] -ErrorAction SilentlyContinue
+    if ($isig -and $isig.Status -eq 'Valid' -and $isig.SignerCertificate -and ($isig.SignerCertificate.Subject -match 'Autodesk')) {
+        Add-Finding OK 'Licensing' ('Identity component present (version {0})' -f (Get-Item -LiteralPath $idm[0]).VersionInfo.FileVersion) $idm[0]
+    } else {
+        Add-Finding BAD 'Licensing' ("Identity component is NOT Autodesk-signed ({0})" -f $isig.Status) ($idm[0] + ' - run the Repair step')
+    }
+} elseif ($idmDirs.Count) {
+    Add-Finding WARN 'Licensing' 'Identity component installation is incomplete (AdskIdentityManager.exe is missing)' ($idmDirs[0] + ' - an install did not finish; run the Repair step')
 } elseif ($adskInstalled) {
-    Add-Finding WARN 'Licensing' 'Identity component (AdskIdentityManager) not found' 'Products from 2020 on sign in through it; reinstall it from the official installer (Repair step)'
+    Add-Finding WARN 'Licensing' 'Identity component (AdskIdentityManager) not found' '2024+ products sign in through it; install it with the official installer (Repair step)'
 } else {
     Add-Finding INFO 'Licensing' 'Identity component not installed' 'No Autodesk product is installed on this machine'
 }

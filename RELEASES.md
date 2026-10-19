@@ -1,5 +1,20 @@
 ﻿# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases
 
+## v1.5.2  (2026-10-19 13:41:20)
+
+### What's new in v1.5.2
+
+- **Repair now fixes the "License Startup Error" case automatically.** It stops the licensing service before installing, re-points `AdskLicensing\Current` at the newest genuine build, installs missing official components, then clears the sign-in caches.
+- **AdSSO detection uses the real MSI install path** (`Program Files\Autodesk\Autodesk AdSSO`), not the old Common Files layout. A 2020-2023 product (3ds Max 2023) now gets the sign-in component it actually needs.
+- **Identity Manager counts as installed only when `AdskIdentityManager.exe` exists.** The IBRAHIM machine had the folder but not the exe; that is now reported as an unfinished install and repaired.
+- **New official auto-downloads:** AdSSO 2025 and Identity Manager 1.19.2.0 (UCT, silent `-q`) join ADLS 17.0.0.16519 and the Microsoft WebView2 Evergreen bootstrapper. Every download is Authenticode-verified before use; without `-AllowDownload` nothing is downloaded.
+- **The scanner catches the activator pair that broke the customer machine:** proxy DLLs (`version.dll`, etc.) and the fake `ADSKLicenseAgent.exe`. It checks the agent behind `Current`, and distinguishes an incomplete official update from an unsigned crack stub.
+- **A folder is requested only when the component check itself fails.** Pressing Repair is enough for the four components that have official vendor downloads.
+
+- `AdskDoctor-v1.5.2-Project.zip`  -  0.23 MB  -  SHA256 `CB1FFBB705911CB972E17C1BA8C45EDDBEB7046D69060DB5C3F36B5401947137`
+- `AdskDoctor-v1.5.2-Portable.zip`  -  0.19 MB  -  SHA256 `159BEECB847E2ADDEAC33EA7AA30E0AC4EE317688A1618E008F4621BCDB5B52E`
+- `UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.2.exe`  -  2.14 MB  -  SHA256 `B306ACAFDCE6F5A70B07C690332ED1B2B21D9DAC091BE513E22CA4AA0B5B8E43`
+
 ## v1.5.1  (2026-10-17 21:54:47)
 
 Feedback from a real customer support bundle (2026-10-17): the diagnostic report now shows the registered license mode of every product (single-user / network / standalone / none); Repair handles a locked token cache calmly instead of printing raw PowerShell error blocks; and the cleanup log records the full path of removed crack files.

@@ -114,7 +114,7 @@ $L = @{
     repairApply   = 'إصلاح المكوّنات (تنفيذ)'
     repairPreview = 'إصلاح المكوّنات (معاينة)'
     repairMissing = 'ملف الإصلاح Repair.ps1 لسه مش موجود.'
-    repairAskDir  = "عندك فولدر فيه المثبّتات الرسمية (ADLS / AdSSO / WebView2)؟`n`nنعم = اختار الفولدر`nلا  = كمّل من غيرهم"
+    repairAskDir  = "الفحص مش قادر يحدد المكوّنات الناقصة.`n`nعندك فولدر فيه المثبّتات الرسمية؟`nنعم = اختار الفولدر`nلا  = كمّل، والبرنامج هيقولك المصادر الرسمية"
     pickFolderTitle = 'اختَر فولدر المثبّتات الرسمية'
     noBackups     = 'مفيش نسخ احتياطية.'
     noUndo        = 'مفيش نسخ فيها UNDO.'
@@ -207,7 +207,7 @@ $L = @{
     repairApply   = 'Repair components (apply)'
     repairPreview = 'Repair components (preview)'
     repairMissing = 'Repair.ps1 is not present yet.'
-    repairAskDir  = "Do you have a folder with the official installers (ADLS / AdSSO / WebView2)?`n`nYes = pick the folder`nNo  = continue without them"
+    repairAskDir  = "The component check could not determine what is missing.`n`nDo you have a folder with the official installers?`nYes = pick the folder`nNo  = continue, and the tool will show the official sources"
     pickFolderTitle = 'Select the folder with the official installers'
     noBackups     = 'No backups found.'
     noUndo        = 'No backups contain an UNDO.'
@@ -787,22 +787,29 @@ $buttons['BtnRepair'].Add_Click({
     if ($r -eq 'Yes') {
         # Ask the repair itself what is missing first: a healthy machine is
         # never sent to a folder-picking dialogue, and pressing Repair is all
-        # the confirmation the ADLS / WebView2 auto-fetch needs.
+        # the confirmation the official auto-fetch needs.
         $missing = Get-RepairCheck -RepairPath $repair
+        $auto    = @('ADLS','AdSSO','Identity','WebView2')
+        $tokens  = @($missing -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        $needAuto   = @($tokens | Where-Object { $auto -contains $_ })
+        $needManual = @($tokens | Where-Object { $auto -notcontains $_ })
         if ($missing -eq '') {
             # everything is present - run straight away, no installer questions
-        } elseif ($missing -ne 'unknown' -and $missing -match 'ADLS|WebView2') {
-            # let Repair fetch the missing official components itself
-            # (signature-verified downloads from Autodesk / Microsoft)
+        } elseif ($missing -ne 'unknown' -and $needManual.Count -eq 0) {
+            # all known components can be fetched and signature-verified by
+            # Repair itself (Autodesk CDN / Microsoft)
             $repairArgs += '-AllowDownload'
         } else {
-            # something is missing that auto-fetch cannot help with:
-            # offer the local installer folder as before
+            # the check could not answer (Genuine Service has no public
+            # download and is not required for sign-in, so it never gets
+            # here): offer the local installer folder, but still auto-fetch
+            # the known components that are missing.
             $q = [System.Windows.MessageBox]::Show((T 'repairAskDir'), (T 'repairTitle'), 'YesNo', 'Question')
             if ($q -eq 'Yes') {
                 $dir = Browse-Folder -Title (T 'pickFolderTitle')
                 if ($dir) { $repairArgs += @('-InstallerDir', $dir) }
             }
+            if ($missing -ne 'unknown' -and $needAuto.Count -gt 0) { $repairArgs += '-AllowDownload' }
         }
     }
     Run-Task -Title (T $(if ($r -eq 'Yes') { 'repairApply' } else { 'repairPreview' })) -Arguments $repairArgs

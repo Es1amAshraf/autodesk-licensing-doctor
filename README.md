@@ -10,9 +10,10 @@
 
 A portable Windows toolkit for Autodesk resellers and IT pros that **removes
 leftovers of non-genuine Autodesk patches** and **restores healthy official
-single-user subscription licensing** (`ADLS` + `AdSSO`), so genuine products
-activate and run normally again. It also carries a **full-removal option** that
-takes every Autodesk trace off a machine for a clean re-install.
+single-user subscription licensing** (`ADLS` + AdSSO / Identity Manager), so
+genuine products activate and run normally again. It also carries a
+**full-removal option** that takes every Autodesk trace off a machine for a
+clean re-install.
 
 Windows 10 / 11 · GUI in **Arabic + English** · no installation required.
 
@@ -92,6 +93,7 @@ fresh afterwards.
 | What the customer sees | What the toolkit checks / does |
 |------------------------|-------------------------------|
 | **"Licensing error — An error occurred"** (AutoCAD/Revit 2020+) | Verifies the whole sign-in licensing stack (ADLS build, service state, licensing agent, identity/SSO component), flags a stale or half-updated licensing service, resets leftover licence caches and reinstalls the official components in the Repair phase. |
+| **"License Startup Error — There is a problem with the software license"** (3ds Max 2023) | A stale `AdskLicensing\Current` junction (an older build still active), a missing `AdSSO` component on a 2020–2023 product, or an unfinished licensing update all produce this generic error. Repair re-points `Current` at the newest genuine build, installs AdSSO for legacy products, repairs Identity Manager and clears the sign-in caches. |
 | **"Connection Lost to Autodesk Desktop Licensing Service"** | ADLS presence, state, start-up mode and the signature of its service binary; an old or replaced build is reported and the Repair phase installs the official one. |
 | **Sign-in window never opens / sign-in fails** | AdSSO + identity component, **the Edge WebView2 runtime that renders the sign-in window**, `hosts` hijacks, firewall blocks, WinHTTP proxy, DNS and connectivity to `accounts.autodesk.com`. The product fails with a licensing error *before* the sign-in page when WebView2 is missing. |
 | **Ask for a serial number / activation screen** | Legacy ADLM licence cache (`ProductInformation.pit`, `ProgramData\FLEXnet`) left by a non-genuine activation — the Cleanup phase resets it so the product asks for a normal sign-in again. |
@@ -149,12 +151,13 @@ Tool" used to do this; it is no longer distributed, and this uses the same
 official helper underneath.)
 
 In the Repair flow, when a missing component is the Autodesk licensing service
-(ADLS) or WebView2, the tool downloads the official installer straight from
-Autodesk / Microsoft — Authenticode-verified before use — instead of asking for
-installer files; pressing **Repair components (apply)** is all the confirmation
-needed. And when nothing is missing, Repair no longer asks for any folder at
-all: it first checks read-only (`Repair.ps1 -CheckOnly`) and only prompts when
-there is actually something to install.
+(ADLS), **AdSSO** (the sign-in component for 2020–2023 products), **Identity
+Manager** (2024+) or **WebView2**, the tool downloads the official installer
+straight from Autodesk / Microsoft — Authenticode-verified before use — instead
+of asking for installer files; pressing **Repair components (apply)** is all the
+confirmation needed. When nothing is missing, Repair no longer asks for any
+folder at all: it first checks read-only (`Repair.ps1 -CheckOnly`) and only
+prompts if that check itself cannot run.
 
 ---
 
@@ -184,9 +187,9 @@ powershell -ExecutionPolicy Bypass -File .\Repair.ps1 -Apply
 # Phase 4 — check what is missing without touching anything
 powershell -ExecutionPolicy Bypass -File .\Repair.ps1 -CheckOnly
 
-# Phase 4 — auto-fetch a missing official ADLS / WebView2 (opt-in; downloaded
-# from Autodesk / Microsoft and refused unless the Authenticode signature is
-# valid and by the vendor):
+# Phase 4 — auto-fetch a missing official ADLS / AdSSO / Identity Manager /
+# WebView2 (opt-in; downloaded from Autodesk / Microsoft and refused unless the
+# Authenticode signature is valid and by the vendor):
 powershell -ExecutionPolicy Bypass -File .\Repair.ps1 -Apply -AllowDownload
 
 # Phase 4 — or with the official installers you have (point it at a folder, or
@@ -229,13 +232,14 @@ powershell -ExecutionPolicy Bypass -File .\LicenseMode.ps1 -ProductKey 829P1 -Pr
 `Repair.ps1` **downloads nothing unless it is told to.** It installs the
 official components you give it, and when one is missing with no installer
 supplied it prints where to get the official one instead of inventing a source.
-With the `-AllowDownload` switch it fetches a missing ADLS / WebView2 straight
-from Autodesk's CDN and Microsoft's servers, and only after the Authenticode
-signature (Autodesk / Microsoft) checks out — the GUI passes this switch as
-soon as a missing piece is one of those two, so pressing **Repair components
-(apply)** is all the confirmation needed. `Purge.ps1` never downloads anything
-either — it only removes. `LicenseMode.ps1` never downloads anything either —
-it drives the official helper that already ships with the installed products.
+With the `-AllowDownload` switch it fetches a missing ADLS, AdSSO, Identity
+Manager or WebView2 straight from Autodesk's / Microsoft's servers, and only
+after the Authenticode signature (Autodesk / Microsoft) checks out — the GUI
+passes this switch as soon as a missing piece has an official vendor download,
+so pressing **Repair components (apply)** is all the confirmation needed.
+`Purge.ps1` never downloads anything either — it only removes.
+`LicenseMode.ps1` never downloads anything either — it drives the official
+helper that already ships with the installed products.
 
 ---
 
