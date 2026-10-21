@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="tileBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1c2941"/>
+      <stop offset=".55" stop-color="#111a2a"/>
+      <stop offset="1" stop-color="#070b12"/>
+    </linearGradient>
+    <linearGradient id="red" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff4a5c"/>
+      <stop offset=".52" stop-color="#e41e2e"/>
+      <stop offset="1" stop-color="#b70d21"/>
+    </linearGradient>
+    <linearGradient id="white" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#d9e2ef"/>
+    </linearGradient>
+    <linearGradient id="shieldFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#182338"/>
+      <stop offset="1" stop-color="#0a101b"/>
+    </linearGradient>
+    <filter id="markShadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#000" flood-opacity=".5"/>
+    </filter>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000" flood-opacity=".45"/>
+    </filter>
+  </defs>
+
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#tileBg)"/>
+  <rect x="17" y="17" width="478" height="478" rx="111" fill="none" stroke="#2b3b57" stroke-width="2"/>
+  <ellipse cx="256" cy="72" rx="176" ry="84" fill="#e41e2e" opacity=".10"/>
+
+  <g filter="url(#markShadow)">
+    <path d="M256 58 L410 112 V242 C410 332 348 400 256 450 C164 400 102 332 102 242 V112 Z"
+          fill="url(#shieldFill)" stroke="url(#red)" stroke-width="26" stroke-linejoin="round"/>
+    <path d="M256 86 L388 132 V242 C388 318 336 376 256 420 C176 376 124 318 124 242 V132 Z"
+          fill="none" stroke="#32435f" stroke-width="3"/>
+
+    <g transform="translate(250 238) rotate(-38) scale(.88)">
+      <mask id="wm" maskUnits="userSpaceOnUse" x="-220" y="-220" width="440" height="440">
+        <rect x="-220" y="-220" width="440" height="440" fill="#ffffff"/>
+        <circle cx="0" cy="-52" r="30" fill="#000000"/>
+        <polygon points="-36,-52 0,-142 36,-52" fill="#000000"/>
+      </mask>
+      <g mask="url(#wm)" filter="url(#softShadow)">
+        <circle cx="0" cy="-52" r="62" fill="url(#white)"/>
+        <rect x="-23" y="-52" width="46" height="208" rx="23" fill="url(#white)"/>
+      </g>
+    </g>
+
+    <circle cx="347" cy="351" r="52" fill="#0b1320" stroke="#37d39b" stroke-width="8"/>
+    <path d="M323 351 L341 369 L374 334" fill="none" stroke="#37d39b" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

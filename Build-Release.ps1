@@ -6,7 +6,7 @@
     1) PROJECT   -> AdskDoctor-v<ver>-Project.zip        (source files)
     2) PORTABLE  -> AdskDoctor-v<ver>-Portable.zip       (run from anywhere)
     3) SETUP     -> UNLOCK-DIGITAL-AdskDoctor-Setup-<ver>.exe   (real installer,
-                    Inno Setup, branded with unlock-logo.ico)
+                    Inno Setup, branded with AdskDoctor.ico)
 
   Plus a per-version record (RELEASE-RECORD.txt + manifest.json + SHA256SUMS)
   and an entry appended to RELEASES.md.
@@ -32,6 +32,10 @@ param(
     # Use the legacy ZIP-based installer instead of the Inno Setup .exe
     [switch]$LegacySetupZip,
 
+    # Public page that hosts this release (written into update.json). Leave empty
+    # when the release folder will be served from its own URL / copied to a share.
+    [string]$DownloadPage = '',
+
     # Open the release folder when done
     [switch]$Open
 )
@@ -47,6 +51,13 @@ function Write-Warn2($m){ Write-Host ("  [!] " + $m) -ForegroundColor Yellow }
 function Save-Text {
     param([string]$Path, [string]$Text)
     $enc = New-Object System.Text.UTF8Encoding($true)   # UTF-8 with BOM (Arabic-safe)
+    [System.IO.File]::WriteAllText($Path, $Text, $enc)
+}
+function Save-Json {
+    param([string]$Path, [string]$Text)
+    # JSON must not start with a UTF-8 BOM: Windows PowerShell's JSON parser
+    # rejects it when the file is fetched over HTTP.
+    $enc = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($Path, $Text, $enc)
 }
 function Get-Sha256([string]$Path) { (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash }
@@ -71,23 +82,19 @@ $gui        = Join-Path $root 'AdskDoctor-GUI.ps1'
 $exeName    = 'UNLOCK-DIGITAL-AdskDoctor.exe'
 $exe        = Join-Path $root $exeName
 $icon       = Join-Path $root 'AdskDoctor.ico'
-$logoPng    = Join-Path $root 'unlock-logo.png'
-$logoIco    = Join-Path $root 'unlock-logo.ico'
+$logoPng    = Join-Path $root 'adskdoctor-logo.png'
+$logoIco    = $icon
 $licenseF   = Join-Path $root 'LICENSE'
-$runtimeScripts = @('AdskDoctor.ps1','Backup.ps1','Clean.ps1','Purge.ps1','Repair.ps1','LicenseMode.ps1','Update.ps1')
-$sourceScripts  = @('AdskDoctor.ps1','Backup.ps1','Clean.ps1','Purge.ps1','Repair.ps1','LicenseMode.ps1','Update.ps1','AdskDoctor-GUI.ps1','make-icon.ps1','make-logo-icon.ps1','Build-Release.ps1')
-$launchers      = @('Run-Diagnostic.cmd','Run-Backup.cmd')
+$runtimeScripts = @('AdskDoctor-GUI.ps1','AdskDoctor.ps1','Backup.ps1','Clean.ps1','Purge.ps1','Repair.ps1','NlmCommon.ps1','NlmFix.ps1','LicenseMode.ps1','Update.ps1')
+$sourceScripts  = @('AdskDoctor.ps1','Backup.ps1','Clean.ps1','Purge.ps1','Repair.ps1','NlmCommon.ps1','NlmFix.ps1','LicenseMode.ps1','Update.ps1','AdskDoctor-GUI.ps1','make-icon.ps1','make-logo-icon.ps1','Build-Release.ps1')
+$launchers      = @('Run-GUI.vbs','Run-GUI.cmd','Run-Diagnostic.cmd','Run-Backup.cmd')
 $installerFiles = @('Install.ps1','Install.cmd','Uninstall.ps1','Uninstall.cmd')
 
-$required = @('AdskDoctor-GUI.ps1') + $runtimeScripts + @('AdskDoctor.ico')
+$required = @('AdskDoctor-GUI.ps1') + $runtimeScripts + $launchers + @('AdskDoctor.ico','adskdoctor-logo.png')
 $missing  = @($required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $root $_)) })
 if ($missing.Count) { throw ("Missing required file(s): " + ($missing -join ', ')) }
 
-# brand icon for the installer (generate from the PNG logo when possible)
-if (-not (Test-Path -LiteralPath $logoIco) -and (Test-Path -LiteralPath $logoPng)) {
-    Write-Step "Generating unlock-logo.ico from unlock-logo.png ..."
-    & (Join-Path $root 'make-logo-icon.ps1') -Source $logoPng -Dest $logoIco | Out-Null
-}
+# The approved product mark is the icon for both the app and the installer.
 $hasIco = Test-Path -LiteralPath $logoIco
 
 # locate ISCC (Inno Setup)
@@ -194,7 +201,7 @@ Copy-Item $exe $sProj -Force
 Copy-Item $icon $sProj -Force
 if ($hasIco) { Copy-Item $logoIco $sProj -Force }
 if (Test-Path $logoPng) { Copy-Item $logoPng $sProj -Force }
-foreach ($f in @('LICENSE','RELEASES.md','.gitignore','.gitattributes')) {
+foreach ($f in @('LICENSE','RELEASES.md','.gitignore','.gitattributes','update-config.json','update-config.example.json')) {
     $src = Join-Path $root $f
     if (Test-Path $src) { Copy-Item $src $sProj -Force }
 }
@@ -211,6 +218,10 @@ $runtimePayload = @($exe) + ($runtimeScripts | ForEach-Object { Join-Path $root 
 if ($hasIco) { $runtimePayload += $logoIco }
 if (Test-Path $logoPng) { $runtimePayload += $logoPng }
 $runtimePayload += ($launchers | ForEach-Object { Join-Path $root $_ } | Where-Object { Test-Path $_ })
+$runtimeConfig = Join-Path $root 'update-config.json'
+if (Test-Path -LiteralPath $runtimeConfig) { $runtimePayload += $runtimeConfig }
+$runtimeConfigExample = Join-Path $root 'update-config.example.json'
+if (Test-Path -LiteralPath $runtimeConfigExample) { $runtimePayload += $runtimeConfigExample }
 
 # --- 2b) PORTABLE ----------------------------------------------------------
 Copy-Item $runtimePayload $sPort -Force
@@ -219,11 +230,16 @@ if (Test-Path $licenseF) { Copy-Item $licenseF $sPort -Force }
 $portableReadme = @"
 UNLOCK DIGITAL - Autodesk Licensing Doctor  (PORTABLE v$Version)
 =================================================================
-No installation required. Just run:  $exeName
+No installation required. Double-click:  Run-GUI.vbs
 (accept the UAC prompt - the tool needs administrator rights.)
 
+Run-GUI.vbs uses the Microsoft-signed PowerShell host, so it also works on
+Windows 11 with Smart App Control enabled. The compiled $exeName is still
+included; use it only on machines where unsigned EXEs are allowed (or after
+the SignPath-signed release is installed).
+
 Keep ALL files in this folder together - the app calls the .ps1 scripts
-that sit next to the .exe.
+that sit next to the launcher.
 
 Copyright (c) 2026 UNLOCK DIGITAL - By Eng. Eslam Ashraf   (MIT)
 "@
@@ -298,6 +314,27 @@ $hashLines = @()
 foreach ($a in $artifacts) { $hashLines += ("{0}  {1}" -f (Get-Sha256 $a), (Split-Path $a -Leaf)) }
 Save-Text (Join-Path $releaseDir 'SHA256SUMS.txt') (($hashLines -join "`r`n") + "`r`n")
 
+# Machine-readable manifest for Update.ps1. The URLs are relative on purpose:
+# upload (or copy) this whole release folder to any HTTPS host / share and the
+# updater resolves them against update.json's own location.
+$portableName = Split-Path $zipPortable -Leaf
+$portableHash = ''
+foreach ($h in $hashLines) {
+    if ($h -match ('^([0-9A-Fa-f]{64})\s+\*?' + [regex]::Escape($portableName) + '$')) {
+        $portableHash = $Matches[1]; break
+    }
+}
+if (-not $portableHash) { throw ('Portable zip hash not found for ' + $portableName) }
+$updateManifest = [ordered]@{
+    version      = $Version
+    portableUrl  = $portableName
+    sha256       = $portableHash
+    sha256Url    = 'SHA256SUMS.txt'
+    downloadPage = $DownloadPage
+    notes        = $Notes
+}
+Save-Json (Join-Path $releaseDir 'update.json') ($updateManifest | ConvertTo-Json -Depth 5)
+
 $built = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
 $ver   = (Get-Item $exe).VersionInfo
 $kind  = { param($p) if ($p -like '*.exe') { 'installer (.exe)' } elseif ($p -like '*Project*') { 'source' } else { 'portable' } }
@@ -346,7 +383,7 @@ $manifest = [ordered]@{
         }
     )
 }
-Save-Text (Join-Path $releaseDir 'manifest.json') ($manifest | ConvertTo-Json -Depth 5)
+Save-Json (Join-Path $releaseDir 'manifest.json') ($manifest | ConvertTo-Json -Depth 5)
 
 $log    = Join-Path $root 'RELEASES.md'
 $header = "# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases`r`n`r`n"

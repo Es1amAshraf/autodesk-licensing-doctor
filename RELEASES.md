@@ -1,5 +1,21 @@
 ﻿# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases
 
+## v1.5.4  (2026-10-21 14:52:12)
+
+Maintenance release: fixes Clean/Purge on machines with a stripped Windows PATH, hardens the Run-GUI.cmd elevation check, forces administrator launch for every entry point, and keeps the AutoCAD 2027 NLM fix. Also refreshes the Windows 10/11 Smart App Control guidance.
+
+- `AdskDoctor-v1.5.4-Project.zip`  -  0.46 MB  -  SHA256 `C14588837B691D63EAD173E8B79974DF3F23851DBC087B2142CE4DCF561A20B0`
+- `AdskDoctor-v1.5.4-Portable.zip`  -  0.44 MB  -  SHA256 `475544A970DBB3CC438E06B97B2D96C6F084EEDE032BB8553940F2D9BDF21768`
+- `UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.4.exe`  -  2.41 MB  -  SHA256 `5B56631D99D2C7ECF8557576866768D7ED9315C571E910F5B2004CA9EEF0EF73`
+
+## v1.5.3  (2026-10-21 00:13:40)
+
+Windows 10/11 fixes: (1) the GUI no longer resolves PowerShell through PATH; it uses the running host's PSHOME and an absolute System32 fallback. (2) Every launch now forces administrator rights: Run-GUI.vbs uses ShellExecute runas, Run-GUI.cmd self-elevates, and AdskDoctor-GUI.ps1 relaunches itself through UAC if started directly. (3) Smart App Control blocks new unsigned EXEs, so the installer shortcuts and [Run] entry launch AdskDoctor-GUI.ps1 through the Microsoft-signed PowerShell host. The portable ZIP includes the same launchers. Also includes the AutoCAD 2027 NLM installer fix.
+
+- `AdskDoctor-v1.5.3-Project.zip`  -  0.46 MB  -  SHA256 `5EDC5D699E619557E93F89F60ABDF4F19C112FF6EA5F9F66449990A7651E6C3C`
+- `AdskDoctor-v1.5.3-Portable.zip`  -  0.44 MB  -  SHA256 `81C07AD23437B97D6DB19CE3D53CE755D79B2EE55D255BC04A4BEB39B3BE4C3B`
+- `UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.3.exe`  -  2.41 MB  -  SHA256 `417B0CD17A7C41E99699F871DCA5E7F117C913C1A58540BDA262B094DB81C25C`
+
 ## v1.5.2  (2026-10-19 13:41:20)
 
 ### What's new in v1.5.2

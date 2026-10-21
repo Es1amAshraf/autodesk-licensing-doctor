@@ -784,6 +784,177 @@ Describe 'Full removal (Purge.ps1)' {
     }
 }
 
+Describe 'Product mark' {
+    It 'uses the approved AdskDoctor mark in the header and the title bar' {
+        $gui = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor-GUI.ps1') -Raw
+        $gui | Should -Match 'adskdoctor-logo\.png'
+        $gui | Should -Not -Match 'unlock-logo\.png'
+        $gui | Should -Match 'CreateBitmapSourceFromHIcon'
+        # The mark must not be mirrored when the whole window switches to RTL.
+        $gui | Should -Match 'FlowDirection="LeftToRight"'
+    }
+
+    It 'ships a 512 px master and a multi-resolution Windows icon' {
+        $png = Join-Path $script:Root 'adskdoctor-logo.png'
+        $ico = Join-Path $script:Root 'AdskDoctor.ico'
+        Test-Path -LiteralPath $png | Should -BeTrue
+        Test-Path -LiteralPath $ico | Should -BeTrue
+
+        Add-Type -AssemblyName System.Drawing
+        $img = [System.Drawing.Image]::FromFile($png)
+        try {
+            $img.Width  | Should -Be 512
+            $img.Height | Should -Be 512
+        } finally { $img.Dispose() }
+
+        $bytes = [IO.File]::ReadAllBytes($ico)
+        $count = [BitConverter]::ToUInt16($bytes, 4)
+        $count | Should -BeGreaterOrEqual 8
+        $sizes = @(for ($i = 0; $i -lt $count; $i++) {
+            $w = $bytes[6 + 16 * $i]
+            if ($w -eq 0) { 256 } else { $w }
+        })
+        $sizes | Should -Contain 16
+        $sizes | Should -Contain 32
+        $sizes | Should -Contain 256
+    }
+
+    It 'uses the product mark for the site favicon and installable icons' {
+        $assets = Join-Path $script:Root 'website\assets'
+        foreach ($name in @('favicon.svg', 'favicon.ico', 'adskdoctor-icon-512.png', 'apple-touch-icon.png')) {
+            Test-Path -LiteralPath (Join-Path $assets $name) | Should -BeTrue -Because "$name is part of the product identity"
+        }
+        $manifest = Get-Content -LiteralPath (Join-Path $script:Root 'website\site.webmanifest') -Raw | ConvertFrom-Json
+        @($manifest.icons.src) | Should -Contain '/assets/adskdoctor-icon-512.png'
+        $html = Get-Content -LiteralPath (Join-Path $script:Root 'website\index.html') -Raw
+        $html | Should -Match 'assets/favicon\.svg'
+        $html | Should -Match 'assets/apple-touch-icon\.png'
+    }
+}
+
+Describe 'AutoCAD 2027 NLM installer blocker' {
+    It 'detects the stale pointers and previews without changing anything' {
+        $fake = Join-Path $script:Tmp ('nlm-' + [guid]::NewGuid().ToString('N'))
+        $licDir = Join-Path $fake 'Autodesk\AdskLicensingService\sub'
+        New-Item -ItemType Directory -Force -Path $licDir | Out-Null
+        $info = Join-Path $fake 'Autodesk\AdskLicensingService\nlm-server-info.json'
+        $lic  = Join-Path $licDir 'licpath.lic'
+        Set-Content -LiteralPath $info -Value '{"server":"old"}' -Encoding ASCII
+        Set-Content -LiteralPath $lic  -Value 'SERVER old 000000000000' -Encoding ASCII
+
+        $out = Invoke-ToolScript -Name 'NlmFix.ps1' -Arguments @(
+            '-CheckOnly', '-ProgramDataRoot', $fake,
+            '-SkipRegistry', '-SkipEnvironment', '-SkipService')
+        $out | Should -Match 'NLMCHECK blockers=2'
+        $out | Should -Match 'NLMRESULT applied=0 remaining=2'
+        Test-Path -LiteralPath $info | Should -BeTrue
+        Test-Path -LiteralPath $lic  | Should -BeTrue
+    }
+
+    It 'backs up, clears and restores the stale pointers' {
+        $fake = Join-Path $script:Tmp ('nlm-' + [guid]::NewGuid().ToString('N'))
+        $licDir = Join-Path $fake 'Autodesk\AdskLicensingService\sub'
+        New-Item -ItemType Directory -Force -Path $licDir | Out-Null
+        $info = Join-Path $fake 'Autodesk\AdskLicensingService\nlm-server-info.json'
+        $lic  = Join-Path $licDir 'licpath.lic'
+        Set-Content -LiteralPath $info -Value '{"server":"old"}' -Encoding ASCII
+        Set-Content -LiteralPath $lic  -Value 'SERVER old 000000000000' -Encoding ASCII
+        $backup = Join-Path $fake 'backups'
+
+        $out = Invoke-ToolScript -Name 'NlmFix.ps1' -Arguments @(
+            '-Apply', '-ProgramDataRoot', $fake,
+            '-SkipRegistry', '-SkipEnvironment', '-SkipService',
+            '-BackupRoot', $backup)
+        $out | Should -Match 'NLMRESULT applied=2 remaining=0'
+        Test-Path -LiteralPath $info | Should -BeFalse
+        Test-Path -LiteralPath $lic  | Should -BeFalse
+
+        $undo = @(Get-ChildItem -LiteralPath $backup -Filter 'UNDO.ps1' -Recurse -File)
+        $undo.Count | Should -Be 1
+        & $script:PsExe -NoProfile -ExecutionPolicy Bypass -File $undo[0].FullName 2>&1 | Out-String | Should -Match 'restored'
+        Test-Path -LiteralPath $info | Should -BeTrue
+        Test-Path -LiteralPath $lic  | Should -BeTrue
+    }
+
+    It 'compares NLM versions against the AutoCAD 2027 minimum' {
+        . (Join-Path $script:Root 'NlmCommon.ps1')
+        (ConvertTo-NlmVersion '11.19.8.0')  -lt [version]'11.19.9.0' | Should -BeTrue
+        (ConvertTo-NlmVersion '11.19.9')    -eq [version]'11.19.9.0' | Should -BeTrue
+        (ConvertTo-NlmVersion '11.19.10.1') -gt [version]'11.19.9.0' | Should -BeTrue
+        ConvertTo-NlmVersion 'not-a-version' | Should -BeNullOrEmpty
+    }
+
+    It 'runs the blocker cleanup from Repair and ships it in the release' {
+        $repair = Get-Content -LiteralPath (Join-Path $script:Root 'Repair.ps1') -Raw
+        $repair | Should -Match '\[switch\]\$SkipNlmFix'
+        $repair | Should -Match 'Invoke-NlmBlockerFix'
+        $repair | Should -Match 'NlmCommon\.ps1'
+        $diag = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor.ps1') -Raw
+        $diag | Should -Match 'Get-NlmInstallBlockers'
+        $backup = Get-Content -LiteralPath (Join-Path $script:Root 'Backup.ps1') -Raw
+        $backup | Should -Match 'Autodesk\\AdskLicensingService'
+        $build = Get-Content -LiteralPath (Join-Path $script:Root 'Build-Release.ps1') -Raw
+        $build | Should -Match 'NlmCommon\.ps1'
+        $build | Should -Match 'NlmFix\.ps1'
+    }
+}
+
+Describe 'Smart App Control launch fallback' {
+    It 'ships a signed-host launcher for unsigned builds' {
+        $vbs = Join-Path $script:Root 'Run-GUI.vbs'
+        $cmd = Join-Path $script:Root 'Run-GUI.cmd'
+        Test-Path -LiteralPath $vbs | Should -BeTrue
+        Test-Path -LiteralPath $cmd | Should -BeTrue
+        $body = Get-Content -LiteralPath $vbs -Raw
+        $body | Should -Match 'Shell\.Application'
+        $body | Should -Match 'ShellExecute'
+        $body | Should -Match 'runas'
+        $body | Should -Match 'AdskDoctor-GUI\.ps1'
+        $body | Should -Match 'WindowsPowerShell'
+        $cmdBody = Get-Content -LiteralPath $cmd -Raw
+        $cmdBody | Should -Match 'WindowsPowerShell'
+    }
+
+    It 'does not resolve PowerShell through a possibly broken PATH' {
+        $gui = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor-GUI.ps1') -Raw
+        $gui | Should -Match 'function Get-PowerShellExe'
+        $gui | Should -Match '\$PSHOME'
+        $gui | Should -Not -Match '\(Get-Command powershell\)\.Source'
+        $gui | Should -Not -Match '& powershell\.exe'
+        $gui | Should -Not -Match "Start-Process -FilePath 'powershell\.exe'"
+    }
+
+    It 'forces elevation for direct script and cmd launches' {
+        $gui = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor-GUI.ps1') -Raw
+        $gui | Should -Match 'IsInRole'
+        $gui | Should -Match 'Verb RunAs'
+        $cmd = Get-Content -LiteralPath (Join-Path $script:Root 'Run-GUI.cmd') -Raw
+        $cmd | Should -Match 'fltmc'
+        $cmd | Should -Not -Match '(?m)^\s*net session\b'
+        $cmd | Should -Match 'Verb RunAs'
+    }
+
+    It 'does not resolve PowerShell through PATH in Clean or Purge' {
+        foreach ($name in 'Clean.ps1', 'Purge.ps1') {
+            $src = Get-Content -LiteralPath (Join-Path $script:Root $name) -Raw
+            $src | Should -Match 'function Get-PowerShellExe'
+            $src | Should -Match '& \(Get-PowerShellExe\)'
+            $src | Should -Not -Match '& powershell\s'
+        }
+    }
+
+    It 'points the installer shortcuts at the script host, not the unsigned exe' {
+        $iss = Get-Content -LiteralPath (Join-Path $script:Root 'installer\AdskDoctor.iss') -Raw
+        $iss | Should -Match 'Run-GUI\.vbs'
+        $iss | Should -Match 'wscript\.exe'
+        $iss | Should -Match 'AdskDoctor-GUI\.ps1'
+        $iss | Should -Not -Match 'Filename: "\{app\}\\#MyExe"'
+        $build = Get-Content -LiteralPath (Join-Path $script:Root 'Build-Release.ps1') -Raw
+        $build | Should -Match 'Run-GUI\.vbs'
+        $build | Should -Match "'AdskDoctor-GUI\.ps1'"
+    }
+}
+
 Describe 'Operation logs and smarter removal (v1.3.1 hardening)' {
     It 'writes an operation log a support request can carry' {
         $oldNoLog  = $env:ADSKDOCTOR_NOLOG
@@ -1095,11 +1266,85 @@ Describe 'In-app GitHub updater' {
         $upd | Should -Not -Match 'http://'
     }
 
+    It 'can use an update manifest when GitHub is unavailable' {
+        $upd = Get-Content -LiteralPath (Join-Path $script:Root 'Update.ps1') -Raw
+        $upd | Should -Match 'update-config\.json'
+        $upd | Should -Match 'manifestUrl'
+        $upd | Should -Match 'manifestPath'
+        $upd | Should -Match 'sha256Url'
+        $upd | Should -Match 'Resolve-Location'
+        # A UTF-8 BOM must not make a live update.json unreadable.
+        $upd | Should -Match 'RawContentStream'
+        $upd | Should -Match 'TrimStart\(\[char\]0xFEFF\)'
+        $build = Get-Content -LiteralPath (Join-Path $script:Root 'Build-Release.ps1') -Raw
+        $build | Should -Match 'update\.json'
+        $build | Should -Match 'portableUrl'
+        $build | Should -Match 'sha256Url'
+        # JSON is written without a BOM on purpose; .ps1 files still keep theirs.
+        $build | Should -Match 'function Save-Json'
+        $build | Should -Match 'Save-Json \(Join-Path \$releaseDir ''update\.json'''
+        $build | Should -Match 'Save-Json \(Join-Path \$releaseDir ''manifest\.json'''
+    }
+
+    It 'uses a local manifest and treats 1.5.2.0 as the same release as 1.5.2' {
+        $dir = Join-Path $script:Tmp ('upd-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $payload = Join-Path $dir 'payload'
+        New-Item -ItemType Directory -Force -Path $payload | Out-Null
+        Set-Content -LiteralPath (Join-Path $payload 'UNLOCK-DIGITAL-AdskDoctor.exe') -Value 'stub' -Encoding ASCII
+        $zip = Join-Path $dir 'AdskDoctor-v9.9.9-Portable.zip'
+        Compress-Archive -Path (Join-Path $payload '*') -DestinationPath $zip -Force
+        $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
+        $man = [ordered]@{
+            version      = '9.9.9'
+            portableUrl  = (Split-Path $zip -Leaf)
+            sha256       = $hash
+            downloadPage = '.'
+        }
+        $manPath = Join-Path $dir 'update.json'
+        $man | ConvertTo-Json | Set-Content -LiteralPath $manPath -Encoding UTF8
+
+        $out = Invoke-ToolScript -Name 'Update.ps1' -Arguments @('-Check', '-CurrentVersion', '9.9.9.0', '-ManifestPath', $manPath)
+        $out | Should -Match 'UPDATERESULT .*available=0'
+        $out | Should -Match 'source=manifest'
+
+        $out2 = Invoke-ToolScript -Name 'Update.ps1' -Arguments @('-Check', '-CurrentVersion', '9.9.8', '-ManifestPath', $manPath)
+        $out2 | Should -Match 'UPDATERESULT .*available=1'
+
+        $old = $env:ADSKDOCTOR_UPDATEDIR
+        try {
+            $env:ADSKDOCTOR_UPDATEDIR = Join-Path $dir 'upd'
+            $out3 = Invoke-ToolScript -Name 'Update.ps1' -Arguments @('-Download', '-CurrentVersion', '9.9.8', '-ManifestPath', $manPath)
+            $out3 | Should -Match 'SHA256 ok'
+            $out3 | Should -Match 'UPDATERESULT staged='
+        } finally {
+            if ($null -eq $old) { Remove-Item Env:\ADSKDOCTOR_UPDATEDIR -ErrorAction SilentlyContinue }
+            else { $env:ADSKDOCTOR_UPDATEDIR = $old }
+        }
+    }
+
     It 'verifies the SHA256 of the archive against the release SHA256SUMS.txt' {
         $upd = Get-Content -LiteralPath (Join-Path $script:Root 'Update.ps1') -Raw
         $upd | Should -Match 'SHA256SUMS\.txt'
         $upd | Should -Match 'Get-FileHash'
         $upd | Should -Match 'SHA256 mismatch'
+    }
+
+    It 'parses staged paths with spaces and free-text errors from the updater' {
+        $gui = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor-GUI.ps1') -Raw
+        $fn = [regex]::Match($gui, '(?ms)^function Get-UpdateResult \{.*?^}').Value
+        $fn | Should -Not -BeNullOrEmpty
+        . ([scriptblock]::Create($fn))
+
+        $r = Get-UpdateResult -Out @(
+            'UPDATERESULT staged=C:\ProgramData\UNLOCK DIGITAL\update\staging\v1.5.3 version=1.5.3 apply=C:\ProgramData\UNLOCK DIGITAL\update\apply-update.ps1 source=manifest'
+        )
+        $r['staged']  | Should -Be 'C:\ProgramData\UNLOCK DIGITAL\update\staging\v1.5.3'
+        $r['apply']   | Should -Be 'C:\ProgramData\UNLOCK DIGITAL\update\apply-update.ps1'
+        $r['version'] | Should -Be '1.5.3'
+
+        $r = Get-UpdateResult -Out @('UPDATERESULT error=github: feed 404 with spaces')
+        $r['error'] | Should -Be 'github: feed 404 with spaces'
     }
 
     It 'replaces the running copy through a generated apply script that waits for the app to exit' {
@@ -1111,6 +1356,7 @@ Describe 'In-app GitHub updater' {
         $gui | Should -Match 'Get-UpdateCheck'
         $gui | Should -Match 'UPDATERESULT'
         $gui | Should -Match "'-WaitPid'"
+        $gui | Should -Match 'Quote-Arg \(\[string\]\$_\)'
     }
 
     It 'ships the updater and the compiled launcher exe in every download' {

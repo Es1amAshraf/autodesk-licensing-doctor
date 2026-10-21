@@ -1,5 +1,8 @@
 # ---- Build / release output ----------------------------------------------
 releases/
+dist/
+.wrangler/
+website/downloads/
 *.zip
 
 # ---- Compiled application (built from the .ps1 sources) -------------------

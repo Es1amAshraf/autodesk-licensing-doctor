@@ -235,6 +235,7 @@ if (Test-Path -LiteralPath $hostsPath) {
 $folderTargets = @(
     @{ Src = (Join-Path $commonFiles 'AdskLicensing');                  Leaf = 'AdskLicensing' },
     @{ Src = (Join-Path $commonFiles 'AdSSO');                          Leaf = 'AdSSO' },
+    @{ Src = (Join-Path $env:ProgramData 'Autodesk\AdskLicensingService'); Leaf = 'Autodesk-AdskLicensingService' },
     @{ Src = (Join-Path $commonFiles 'Network License Manager');        Leaf = 'CommonFiles-NetworkLicenseManager' },
     @{ Src = 'C:\Autodesk\Network License Manager';                     Leaf = 'Autodesk-NetworkLicenseManager' },
     @{ Src = 'C:\FlexLM';                                               Leaf = 'FlexLM' },

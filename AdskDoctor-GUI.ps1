@@ -5,7 +5,7 @@
     Wraps the Phase 1-4 scripts:
         AdskDoctor.ps1 (diagnostic)  Backup.ps1  Clean.ps1  Purge.ps1  Repair.ps1
         LicenseMode.ps1 (license type switch, driven by the panel on the left)
-    Loads a company logo (unlock-logo.png) from this folder if present.
+    Loads the AdskDoctor mark (adskdoctor-logo.png) from this folder if present.
 
     Run:  powershell -STA -ExecutionPolicy Bypass -File .\AdskDoctor-GUI.ps1
           powershell -STA -ExecutionPolicy Bypass -File .\AdskDoctor-GUI.ps1 -Lang ar
@@ -18,13 +18,13 @@ param(
     [string]$Lang = 'en'
 )
 
-Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Xaml
+Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Xaml, System.Drawing
 
 # WPF needs an STA thread.
 if ([System.Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') {
     if ($PSCommandPath -and (Test-Path -LiteralPath $PSCommandPath)) {
         $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = (Get-Command powershell).Source
+        $psi.FileName = (Get-PowerShellExe)
         $extra = ''
         if ($Lang -and $Lang -ne 'en') { $extra = ' -Lang ' + $Lang }
         $psi.Arguments = ('-NoProfile -STA -ExecutionPolicy Bypass -File "{0}"{1}' -f $PSCommandPath, $extra)
@@ -52,6 +52,45 @@ function Get-AppDir {
 }
 $here = Get-AppDir
 
+# Never rely on PATH for the PowerShell host. Some Windows 10/11 machines have
+# a damaged PATH (or a policy that strips it), and then Get-Command powershell
+# fails even though Windows PowerShell is installed. $PSHOME is the folder of
+# the host that is already running this script, so it is always correct.
+function Get-PowerShellExe {
+    $candidates = @()
+    try { if ($PSHOME) { $candidates += (Join-Path $PSHOME 'powershell.exe') } } catch {}
+    try {
+        if ($env:SystemRoot) {
+            $candidates += (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe')
+        }
+    } catch {}
+    foreach ($c in $candidates) {
+        if ($c -and (Test-Path -LiteralPath $c)) { return $c }
+    }
+    $cmd = Get-Command powershell.exe -ErrorAction SilentlyContinue
+    if ($cmd -and $cmd.Source) { return $cmd.Source }
+    return 'powershell.exe'
+}
+
+# The tool repairs services and Program Files, so it must always run elevated.
+# The shortcuts and Run-GUI.vbs already ask for elevation; this is the final
+# guard for anyone who starts the .ps1 directly. If elevation is refused, the
+# app exits instead of running with a misleading "Standard user" state.
+try {
+    $principal = New-Object System.Security.Principal.WindowsPrincipal ([System.Security.Principal.WindowsIdentity]::GetCurrent())
+    if (-not $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        $scriptPath = $PSCommandPath
+        if ($scriptPath -and (Test-Path -LiteralPath $scriptPath)) {
+            $argLine = '-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File "' + $scriptPath + '"'
+            if ($Lang -and $Lang -ne 'en') { $argLine += ' -Lang ' + $Lang }
+            try {
+                Start-Process -FilePath (Get-PowerShellExe) -ArgumentList $argLine -Verb RunAs -ErrorAction Stop
+            } catch {}
+            exit
+        }
+    }
+} catch {}
+
 # ===========================================================================
 # Translations
 # ===========================================================================
@@ -61,15 +100,25 @@ $L = @{
     brand         = 'UNLOCK DIGITAL'
     subtitle      = 'تشخيص وإصلاح مشاكل الترخيص'
     brandSmall    = 'دكتور ترخيص أوتوديسك'
-    actions       = 'الإجراءات'
+    actions       = 'إجراءات سريعة'
+    actionsHint   = 'ابدأ بالفحص'
     bDiag         = 'فحص الجهاز (تشخيص)'
+    bDiagDesc     = 'فحص سريع بدون أي تعديل'
     bBackup       = 'نسخة احتياطية'
+    bBackupDesc   = 'احفظ الحالة قبل أي تغيير'
     bClean        = 'تنظيف الجهاز'
+    bCleanDesc    = 'إزالة بقايا النسخ غير الرسمية'
     bRepair       = 'إصلاح المكوّنات الرسمية'
+    bRepairDesc   = 'إعادة تثبيت مكوّنات الترخيص'
     bUndo         = 'رجوع (Undo)'
+    bUndoDesc     = 'الرجوع عن آخر تغيير'
     bReport       = 'فتح آخر تقرير'
+    bReportShort  = 'تقرير'
+    reportTip     = 'فتح آخر تقرير تشخيصي'
     bLang         = 'English'
     bPurge        = 'إزالة أوتوديسك بالكامل'
+    dangerZone    = 'منطقة الخطر'
+    removeDesc    = 'إزالة التطبيقات والترخيص والخدمات ومدخلات السجل وبقايا الكراك. يتم عمل نسخة احتياطية أولاً.'
     purgeTip      = 'يمسح كل منتجات ومكوّنات أوتوديسك من الجهاز (بنسخة احتياطية أولاً) — عشان تبدأ من الصفر بنسخة رسمية جديدة'
     purgeTitle    = 'إزالة أوتوديسك بالكامل'
     purgeText     = "هتشيل كل حاجة تخص أوتوديسك من الجهاز: البرامج، الترخيص، الخدمات، السجل، وبقايا الكراك.`n`nنعم = تنفيذ فعلي (بعد نسخة احتياطية)`nلا  = معاينة بس (بدون أي تغيير)"
@@ -88,10 +137,19 @@ $L = @{
     updateReady       = 'تم تنزيل الإصدار v{0}. الأداة هتقفل وتفتح تاني لوحدها على الإصدار الجديد.'
     updateFailed      = "التحديث فشل:`n"
     updateOffline     = 'مش قادر يوصل لـ GitHub. اتأكد من الإنترنت وجرّب تاني.'
+    updateUnavailable = 'تعذر الوصول لمصدر التحديث. اضبط update-config.json على رابط update.json، أو نزّل آخر إصدار يدويًا.'
     bBundle       = 'حزمة الدعم (تقرير + لوجات)'
+    bBundleShort  = 'حزمة'
     bundleTip     = 'يعمل فحص ويجمع لوجات الترخيص مع التقرير في ملف ZIP واحد تبعته للدعم'
     tip           = 'نصيحة: ابدأ بـ «فحص الجهاز»، بعدين «نسخة احتياطية»، وبعدها «تنظيف» ثم «إصلاح». ولو منتج واقف على شاشة سيرفر الترخيص واشتراكك مستخدم واحد: استعمل «وضع الترخيص» وحوّله لـ«مستخدم واحد».'
     logTitle      = 'سجل العمليات'
+    logLive       = 'مباشر'
+    logTip        = 'الفحص لا يغيّر أي شيء. القرار في يدك.'
+    copyLog       = 'نسخ'
+    clearLog      = 'مسح'
+    chipAdmin     = 'مسؤول'
+    chipStandard  = 'مستخدم عادي'
+    chipLocal     = 'محلي فقط'
     statusReady   = 'جاهز'
     statusRunning = 'شغّال: '
     statusDone    = 'خلص بنجاح'
@@ -110,7 +168,7 @@ $L = @{
     cleanApply    = 'تنظيف الجهاز (تنفيذ فعلي)'
     cleanPreview  = 'تنظيف الجهاز (معاينة)'
     repairTitle   = 'إصلاح المكوّنات'
-    repairText    = "إصلاح/إعادة تسطيب مكوّنات الترخيص الرسمية؟`n`nنعم = تنفيذ فعلي`nلا  = معاينة بس"
+    repairText    = "إصلاح/إعادة تسطيب مكوّنات الترخيص الرسمية؟`n`nلو فيه بقايا NLM قديمة بتمنع تسطيب AutoCAD 2027، هتتشال بعد نسخة احتياطية.`n`nنعم = تنفيذ فعلي`nلا  = معاينة بس"
     repairApply   = 'إصلاح المكوّنات (تنفيذ)'
     repairPreview = 'إصلاح المكوّنات (معاينة)'
     repairMissing = 'ملف الإصلاح Repair.ps1 لسه مش موجود.'
@@ -126,13 +184,20 @@ $L = @{
     pickCancel    = 'إلغاء'
     busyMsg       = 'فيه عملية شغالة بالفعل، استنى تخلص.'
     licModeTitle  = 'وضع الترخيص'
+    licProductField = 'المنتج'
+    licModeField  = 'الوضع'
     licApply      = 'تحويل نوع الترخيص'
     licRefresh    = 'تحديث القائمة'
     licMissing    = 'ملف LicenseMode.ps1 لسه مش موجود.'
+    licMissingShort = 'LicenseMode.ps1 مش موجود'
     licNoHelper   = 'خدمة ترخيص أوتوديسك (ADLS) مش متسطّبة على الجهاز — سطّب منتج 2020 أو أحدث الأول.'
+    licNoHelperShort = 'ADLS غير مثبت'
     licNoProducts = 'مفيش منتجات أوتوديسك (2020 أو أحدث) مسجّلة على الجهاز.'
+    licNoProductsShort = 'لا توجد منتجات'
     licListFailed = 'تعذّر قراءة قائمة المنتجات من خدمة الترخيص.'
+    licListFailedShort = 'فشل قراءة القائمة'
     licError      = 'حصل خطأ أثناء قراءة حالة الترخيص.'
+    licErrorShort = 'فشل قراءة الحالة'
     licCurrent    = 'الحالي: {0}'
     licServersHint = 'سيرفرات الترخيص (مثال: 10.0.0.5 أو 27000@10.0.0.5,10.0.0.6) — لو سيبتها فاضية هيتحوّل الوضع بس'
     licConfirmIntro = 'هيتم تحويل نوع ترخيص المنتج ده:'
@@ -154,15 +219,25 @@ $L = @{
     brand         = 'UNLOCK DIGITAL'
     subtitle      = 'Diagnose and fix licensing problems'
     brandSmall    = 'Autodesk Licensing Doctor'
-    actions       = 'Actions'
+    actions       = 'Quick actions'
+    actionsHint   = 'Start with a scan'
     bDiag         = 'Scan this PC (diagnose)'
+    bDiagDesc     = 'Read-only health check'
     bBackup       = 'Create backup'
+    bBackupDesc   = 'Capture state before any change'
     bClean        = 'Clean this PC'
+    bCleanDesc    = 'Remove non-genuine leftovers'
     bRepair       = 'Repair official components'
+    bRepairDesc   = 'Reinstall the licensing stack'
     bUndo         = 'Roll back (Undo)'
+    bUndoDesc     = 'Undo the last change'
     bReport       = 'Open last report'
+    bReportShort  = 'Report'
+    reportTip     = 'Open the last diagnostic report'
     bLang         = 'العربية'
     bPurge        = 'Remove Autodesk completely'
+    dangerZone    = 'Danger zone'
+    removeDesc    = 'Uninstalls apps, licensing, services, registry entries and crack leftovers. Backup first.'
     purgeTip      = 'Removes every Autodesk product and component from this PC (with a backup first) - start from zero with a fresh official copy'
     purgeTitle    = 'Remove Autodesk completely'
     purgeText     = "This removes everything Autodesk from this PC: products, licensing, services, registry and crack leftovers.`n`nYes = apply (a backup runs first)`nNo  = preview only (no changes)"
@@ -181,10 +256,19 @@ $L = @{
     updateReady       = 'Version v{0} has been downloaded. The tool will close and reopen on the new version.'
     updateFailed      = "Update failed:`n"
     updateOffline     = 'Could not reach GitHub. Check the internet connection and try again.'
+    updateUnavailable = 'Could not reach the update source. Point update-config.json at your update.json, or download the latest release manually.'
     bBundle       = 'Support bundle (report + logs)'
+    bBundleShort  = 'Bundle'
     bundleTip     = 'Scan, then collect the licensing logs with the report into one zip to send to support'
     tip           = 'Tip: start with "Scan this PC", then "Create backup", then "Clean this PC" and finally "Repair". Stuck on the license-server screen with a sign-in subscription? Use "License mode" and switch the product back to "Single-user".'
     logTitle      = 'Activity log'
+    logLive       = 'Live output'
+    logTip        = 'No changes are made by scanning. You stay in control.'
+    copyLog       = 'Copy'
+    clearLog      = 'Clear'
+    chipAdmin     = 'Administrator'
+    chipStandard  = 'Standard user'
+    chipLocal     = 'Local only'
     statusReady   = 'Ready'
     statusRunning = 'Running: '
     statusDone    = 'Finished successfully'
@@ -203,7 +287,7 @@ $L = @{
     cleanApply    = 'Clean this PC (apply)'
     cleanPreview  = 'Clean this PC (preview)'
     repairTitle   = 'Repair components'
-    repairText    = "Repair / reinstall the official licensing components?`n`nYes = apply`nNo  = preview only"
+    repairText    = "Repair / reinstall the official licensing components?`n`nStale NLM pointers that block AutoCAD 2027 setup are backed up and cleared first.`n`nYes = apply`nNo  = preview only"
     repairApply   = 'Repair components (apply)'
     repairPreview = 'Repair components (preview)'
     repairMissing = 'Repair.ps1 is not present yet.'
@@ -219,13 +303,20 @@ $L = @{
     pickCancel    = 'Cancel'
     busyMsg       = 'A task is already running, please wait.'
     licModeTitle  = 'License mode'
+    licProductField = 'Product'
+    licModeField  = 'Mode'
     licApply      = 'Switch license type'
     licRefresh    = 'Refresh list'
     licMissing    = 'LicenseMode.ps1 is not present yet.'
+    licMissingShort = 'LicenseMode.ps1 missing'
     licNoHelper   = 'The Autodesk licensing service (ADLS) is not installed - install a 2020+ product first.'
+    licNoHelperShort = 'ADLS missing'
     licNoProducts = 'No Autodesk products (2020 or newer) are registered on this PC.'
+    licNoProductsShort = 'No products'
     licListFailed = 'Could not read the product list from the licensing service.'
+    licListFailedShort = 'Read failed'
     licError      = 'Reading the license state failed.'
+    licErrorShort = 'Read failed'
     licCurrent    = 'Current: {0}'
     licServersHint = 'License servers (e.g. 10.0.0.5 or 27000@10.0.0.5,10.0.0.6) - leave empty to switch the mode only'
     licConfirmIntro = 'About to switch the license type of:'
@@ -253,9 +344,433 @@ function T { param([string]$k) $L[$script:lang][$k] }
 [xml]$xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="UNLOCK DIGITAL" Height="690" Width="1010" MinHeight="560" MinWidth="840"
+        Title="UNLOCK DIGITAL" Height="760" Width="1120" MinHeight="560" MinWidth="900"
         WindowStartupLocation="CenterScreen"
-        Background="#F1F2F4" FontFamily="Segoe UI" FlowDirection="RightToLeft">
+        Background="#070A10" FontFamily="Segoe UI" FlowDirection="RightToLeft"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display">
+  <Window.Resources>
+    <!-- Shared text styles -->
+    <Style x:Key="SectionLabel" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="#C2CCDB"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+    </Style>
+    <Style x:Key="MutedText" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="#7F8DA1"/>
+      <Setter Property="FontSize" Value="10.5"/>
+    </Style>
+    <Style x:Key="FieldLabel" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="#748297"/>
+      <Setter Property="FontSize" Value="9.5"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="Margin" Value="0,7,0,4"/>
+    </Style>
+
+    <!-- Header and small toolbar buttons -->
+    <Style x:Key="HeaderButton" TargetType="Button">
+      <Setter Property="Background" Value="#171F2A"/>
+      <Setter Property="BorderBrush" Value="#2A3647"/>
+      <Setter Property="Foreground" Value="#DBE4F1"/>
+      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Height" Value="32"/>
+      <Setter Property="Padding" Value="12,0"/>
+      <Setter Property="Margin" Value="6,0,0,0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="1" CornerRadius="7" Padding="{TemplateBinding Padding}">
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock Text="{TemplateBinding Tag}" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                           Foreground="{TemplateBinding Foreground}" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                <ContentPresenter VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}"/>
+              </StackPanel>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#202A37"/>
+                <Setter TargetName="Bd" Property="BorderBrush" Value="#36465A"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#121923"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="UpdateButton" TargetType="Button" BasedOn="{StaticResource HeaderButton}">
+      <Setter Property="Background" Value="#12231D"/>
+      <Setter Property="BorderBrush" Value="#24523F"/>
+      <Setter Property="Foreground" Value="#84E6BC"/>
+    </Style>
+    <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource HeaderButton}">
+      <Setter Property="Background" Value="#1D1318"/>
+      <Setter Property="BorderBrush" Value="#4B222A"/>
+      <Setter Property="Foreground" Value="#FFD9DD"/>
+      <Setter Property="Height" Value="32"/>
+      <Setter Property="Margin" Value="0"/>
+    </Style>
+    <Style x:Key="LogToolButton" TargetType="Button" BasedOn="{StaticResource HeaderButton}">
+      <Setter Property="Background" Value="#151D28"/>
+      <Setter Property="BorderBrush" Value="#263243"/>
+      <Setter Property="Foreground" Value="#93A3B8"/>
+      <Setter Property="Height" Value="28"/>
+      <Setter Property="Padding" Value="7,0"/>
+      <Setter Property="FontSize" Value="10"/>
+      <Setter Property="Margin" Value="0,0,5,0"/>
+    </Style>
+    <Style x:Key="SmallButton" TargetType="Button">
+      <Setter Property="Background" Value="#171F2A"/>
+      <Setter Property="BorderBrush" Value="#2A3647"/>
+      <Setter Property="Foreground" Value="#DBE4F1"/>
+      <Setter Property="FontSize" Value="10.5"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Height" Value="30"/>
+      <Setter Property="Padding" Value="10,0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="1" CornerRadius="6" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#202A37"/>
+                <Setter TargetName="Bd" Property="BorderBrush" Value="#36465A"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#121923"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- Large action buttons -->
+    <Style x:Key="ActionButton" TargetType="Button">
+      <Setter Property="Background" Value="#161E29"/>
+      <Setter Property="BorderBrush" Value="#243041"/>
+      <Setter Property="Foreground" Value="#DFE7F2"/>
+      <Setter Property="Height" Value="40"/>
+      <Setter Property="Padding" Value="8,5"/>
+      <Setter Property="Margin" Value="0,0,0,4"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="ContentTemplate" Value="{DynamicResource ActionTemplate}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="1" CornerRadius="8" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#1C2634"/>
+                <Setter TargetName="Bd" Property="BorderBrush" Value="#314054"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#131A24"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="PrimaryActionButton" TargetType="Button">
+      <Setter Property="Background" Value="#21131A"/>
+      <Setter Property="BorderBrush" Value="#5B2530"/>
+      <Setter Property="Foreground" Value="#FFFFFF"/>
+      <Setter Property="Height" Value="40"/>
+      <Setter Property="Padding" Value="8,5"/>
+      <Setter Property="Margin" Value="0,0,0,4"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="ContentTemplate" Value="{DynamicResource PrimaryActionTemplate}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="1" CornerRadius="8" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#2A1720"/>
+                <Setter TargetName="Bd" Property="BorderBrush" Value="#74303C"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#1B0F14"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- Action button content -->
+    <DataTemplate x:Key="ActionTemplate">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <Border Grid.Column="0" Width="26" Height="26" Background="#1D2836" BorderBrush="#2A394C"
+                BorderThickness="1" CornerRadius="6" Margin="0,0,9,0">
+          <TextBlock Text="{Binding [Glyph]}" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                     Foreground="#9FB0C6" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Border>
+        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+          <TextBlock Text="{Binding [Title]}" FontSize="12" FontWeight="SemiBold" Foreground="#DFE7F2"
+                     TextTrimming="CharacterEllipsis"/>
+          <TextBlock Text="{Binding [Desc]}" FontSize="10.5" Foreground="#7F8DA1"
+                     TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+        </StackPanel>
+        <TextBlock Grid.Column="2" Text="&#x203A;" FontSize="18" Foreground="#59687C"
+                   VerticalAlignment="Center" Margin="8,0,0,0"/>
+      </Grid>
+    </DataTemplate>
+    <DataTemplate x:Key="PrimaryActionTemplate">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <Border Grid.Column="0" Width="26" Height="26" Background="#3A1A22" BorderBrush="#6B2A35"
+                BorderThickness="1" CornerRadius="6" Margin="0,0,9,0">
+          <TextBlock Text="{Binding [Glyph]}" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                     Foreground="#FF8A94" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Border>
+        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+          <TextBlock Text="{Binding [Title]}" FontSize="12" FontWeight="SemiBold" Foreground="#FFFFFF"
+                     TextTrimming="CharacterEllipsis"/>
+          <TextBlock Text="{Binding [Desc]}" FontSize="10.5" Foreground="#C8969C"
+                     TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+        </StackPanel>
+        <TextBlock Grid.Column="2" Text="&#x203A;" FontSize="18" Foreground="#FF7C88"
+                   VerticalAlignment="Center" Margin="8,0,0,0"/>
+      </Grid>
+    </DataTemplate>
+
+    <!-- Dark combo box -->
+    <Style x:Key="DarkComboBoxItem" TargetType="ComboBoxItem">
+      <Setter Property="Foreground" Value="#D5DEEB"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Padding" Value="9,6"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBoxItem">
+            <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+              <ContentPresenter/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#202B3A"/>
+              </Trigger>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#2A1A20"/>
+                <Setter Property="Foreground" Value="#FFD9DD"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="DarkComboBox" TargetType="ComboBox">
+      <Setter Property="Height" Value="30"/>
+      <Setter Property="Foreground" Value="#D5DEEB"/>
+      <Setter Property="Background" Value="#151D28"/>
+      <Setter Property="BorderBrush" Value="#273447"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="9,0"/>
+      <Setter Property="ItemContainerStyle" Value="{StaticResource DarkComboBoxItem}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBox">
+            <Grid>
+              <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                      BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="28"/>
+                  </Grid.ColumnDefinitions>
+                  <ContentPresenter Grid.Column="0" Margin="{TemplateBinding Padding}" VerticalAlignment="Center"
+                                    HorizontalAlignment="Left"
+                                    Content="{TemplateBinding SelectionBoxItem}"
+                                    ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                    ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"/>
+                  <Path Grid.Column="1" Data="M 0 0 L 4 4 L 8 0" Stroke="#7D8CA1" StrokeThickness="1.4"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Grid>
+              </Border>
+              <ToggleButton x:Name="Toggle" Focusable="False" ClickMode="Press"
+                            IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                <ToggleButton.Template>
+                  <ControlTemplate TargetType="ToggleButton">
+                    <Border Background="Transparent"/>
+                  </ControlTemplate>
+                </ToggleButton.Template>
+              </ToggleButton>
+              <Popup x:Name="PART_Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}"
+                     AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+                <Border MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                        MaxHeight="240" Background="#151D28" BorderBrush="#2A3647" BorderThickness="1"
+                        CornerRadius="6" Margin="0,4,0,0">
+                  <ScrollViewer>
+                    <ItemsPresenter/>
+                  </ScrollViewer>
+                </Border>
+              </Popup>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="BorderBrush" Value="#3A4B62"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="DarkTextBox" TargetType="TextBox">
+      <Setter Property="Height" Value="28"/>
+      <Setter Property="Background" Value="#151D28"/>
+      <Setter Property="BorderBrush" Value="#273447"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Foreground" Value="#D5DEEB"/>
+      <Setter Property="CaretBrush" Value="#D5DEEB"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Padding" Value="9,0"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TextBox">
+            <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+              <ScrollViewer x:Name="PART_ContentHost" VerticalScrollBarVisibility="{TemplateBinding VerticalScrollBarVisibility}"
+                            HorizontalScrollBarVisibility="{TemplateBinding HorizontalScrollBarVisibility}"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsFocused" Value="True">
+                <Setter TargetName="Bd" Property="BorderBrush" Value="#3A4B62"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="ChipBorder" TargetType="Border">
+      <Setter Property="Background" Value="#131B25"/>
+      <Setter Property="BorderBrush" Value="#243143"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Padding" Value="7,4"/>
+      <Setter Property="Margin" Value="0,0,6,0"/>
+    </Style>
+
+    <!-- Slim dark scrollbar: the default Windows bar is far too bright on this surface. -->
+    <Style TargetType="{x:Type ScrollBar}">
+      <Setter Property="Width" Value="8"/>
+      <Setter Property="MinWidth" Value="8"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="{x:Type ScrollBar}">
+            <Grid Background="Transparent">
+              <Track x:Name="PART_Track" Orientation="{TemplateBinding Orientation}" IsDirectionReversed="True">
+                <Track.DecreaseRepeatButton>
+                  <RepeatButton Command="ScrollBar.PageUpCommand" Background="Transparent" BorderThickness="0" Focusable="False"/>
+                </Track.DecreaseRepeatButton>
+                <Track.Thumb>
+                  <Thumb MinHeight="28">
+                    <Thumb.Template>
+                      <ControlTemplate TargetType="{x:Type Thumb}">
+                        <Border x:Name="ThumbBorder" Background="#3A4B62" CornerRadius="4" Margin="1,2"/>
+                        <ControlTemplate.Triggers>
+                          <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="ThumbBorder" Property="Background" Value="#4B5F7A"/>
+                          </Trigger>
+                          <Trigger Property="IsDragging" Value="True">
+                            <Setter TargetName="ThumbBorder" Property="Background" Value="#5A7190"/>
+                          </Trigger>
+                        </ControlTemplate.Triggers>
+                      </ControlTemplate>
+                    </Thumb.Template>
+                  </Thumb>
+                </Track.Thumb>
+                <Track.IncreaseRepeatButton>
+                  <RepeatButton Command="ScrollBar.PageDownCommand" Background="Transparent" BorderThickness="0" Focusable="False"/>
+                </Track.IncreaseRepeatButton>
+              </Track>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="Orientation" Value="Horizontal">
+                <Setter Property="Height" Value="8"/>
+                <Setter Property="MinHeight" Value="8"/>
+                <Setter Property="Width" Value="Auto"/>
+                <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- License-mode header: compact summary, click to reveal the controls. -->
+    <Style x:Key="LicenseHeaderButton" TargetType="Button">
+      <Setter Property="Background" Value="#0E141C"/>
+      <Setter Property="BorderBrush" Value="#202B3A"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="10,7"/>
+      <Setter Property="Margin" Value="0,0,0,5"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#121923"/>
+                <Setter TargetName="Bd" Property="BorderBrush" Value="#2D3A4D"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#0B1017"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+
   <Grid>
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto"/>
@@ -264,27 +779,37 @@ function T { param([string]$k) $L[$script:lang][$k] }
     </Grid.RowDefinitions>
 
     <!-- Header -->
-    <Border Grid.Row="0" Background="#111214" Padding="20,16">
+    <Border Grid.Row="0" Background="#10151D" BorderBrush="#1D2633" BorderThickness="0,0,0,1" Padding="22,14">
       <Grid>
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*"/>
           <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
-        <StackPanel Grid.Column="0" Orientation="Horizontal">
-          <Border Background="#E41E2E" Width="6" Height="60" CornerRadius="3" Margin="0,0,16,0"/>
-          <Image x:Name="LogoImage" Height="58" Margin="0,0,16,0" Stretch="Uniform" Visibility="Collapsed"/>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <Border Width="5" Height="58" CornerRadius="3" Background="#E41E2E" Margin="0,0,14,0"/>
+          <Border x:Name="LogoTile" Width="52" Height="52" Background="Transparent" CornerRadius="11" Margin="0,0,14,0"
+                  FlowDirection="LeftToRight" Visibility="Collapsed">
+            <Image x:Name="LogoImage" Width="52" Height="52" Stretch="Uniform"
+                   RenderOptions.BitmapScalingMode="HighQuality"/>
+          </Border>
           <StackPanel VerticalAlignment="Center">
-            <TextBlock x:Name="BrandText" Text="UNLOCK DIGITAL" Foreground="White" FontSize="26" FontWeight="Bold"/>
-            <TextBlock x:Name="SubTitle" Text="" Foreground="#AEB3BD" FontSize="13" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
+            <TextBlock Text="UNLOCK DIGITAL" Foreground="#95A1B3" FontSize="10" FontWeight="Bold" Margin="0,0,0,3"/>
+            <TextBlock x:Name="BrandText" Text="UNLOCK DIGITAL" Foreground="#E8EDF5" FontSize="24" FontWeight="Bold"/>
+            <TextBlock x:Name="SubTitle" Text="" Foreground="#8A96A9" FontSize="12" Margin="0,4,0,0"
+                       TextTrimming="CharacterEllipsis"/>
           </StackPanel>
         </StackPanel>
-        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
-          <Button x:Name="BtnPurge" Content="" Height="34" Padding="14,0" Margin="0,0,8,0"
-                  Background="#22252B" Foreground="#FF7A7A" BorderBrush="#7F1D1D" FontWeight="SemiBold"/>
-          <Button x:Name="BtnUpdate" Content="" Height="34" Padding="14,0" Margin="0,0,8,0"
-                  Background="#22252B" Foreground="#7AD1A0" BorderBrush="#1F5C3A" FontWeight="SemiBold"/>
-          <Button x:Name="BtnLang" Content="English" Width="110" Height="34"
-                  Background="#22252B" Foreground="White" BorderBrush="#3A3E46"/>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+          <Border Background="#141C26" BorderBrush="#253141" BorderThickness="1" CornerRadius="12"
+                  Padding="9,7" Margin="0,0,4,0">
+            <StackPanel Orientation="Horizontal">
+              <Ellipse Width="7" Height="7" Fill="#37D39B" Margin="0,0,7,0" VerticalAlignment="Center"/>
+              <TextBlock Text="{Binding Text, ElementName=StatusText}" Foreground="#9FB0C4" FontSize="11.5"
+                         FontWeight="SemiBold" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Border>
+          <Button x:Name="BtnUpdate" Style="{StaticResource UpdateButton}" Tag="&#xE895;" Content="Update"/>
+          <Button x:Name="BtnLang" Style="{StaticResource HeaderButton}" Tag="&#xE8C1;" Content="العربية"/>
         </StackPanel>
       </Grid>
     </Border>
@@ -292,63 +817,182 @@ function T { param([string]$k) $L[$script:lang][$k] }
     <!-- Body -->
     <Grid Grid.Row="1" Margin="16">
       <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="300"/>
+        <ColumnDefinition Width="340"/>
         <ColumnDefinition Width="*"/>
       </Grid.ColumnDefinitions>
 
-      <!-- Action buttons -->
-      <!-- The panel scrolls, so a short window never cuts the tip line in half
-           (the buttons grew with every release and the default height is fixed). -->
-      <Border Grid.Column="0" Background="White" CornerRadius="10" Padding="14" Margin="0,0,14,0">
-        <ScrollViewer VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel>
-          <TextBlock x:Name="ActionsLabel" Text="Actions" FontSize="15" FontWeight="SemiBold" Foreground="#333" Margin="0,0,0,8"/>
-          <Button x:Name="BtnDiag"   Content="" Height="40" Margin="0,0,0,6" FontSize="13"/>
-          <Button x:Name="BtnBackup" Content="" Height="40" Margin="0,0,0,6" FontSize="13"/>
-          <Button x:Name="BtnClean"  Content="" Height="40" Margin="0,0,0,6" FontSize="13"/>
-          <Button x:Name="BtnRepair" Content="" Height="40" Margin="0,0,0,6" FontSize="13"/>
-          <Button x:Name="BtnUndo"   Content="" Height="40" Margin="0,0,0,6" FontSize="13"/>
-          <Separator Margin="0,6,0,6"/>
-          <TextBlock x:Name="LicModeLabel" Text="License mode" FontSize="13" FontWeight="SemiBold" Foreground="#333" Margin="0,0,0,6"/>
-          <ComboBox x:Name="LicProductCombo" Height="30" Margin="0,0,0,6" FontSize="12" DisplayMemberPath="Display"/>
-          <TextBlock x:Name="LicCurrent" TextWrapping="Wrap" Foreground="#6B7280" FontSize="11" Margin="0,0,0,6"/>
-          <ComboBox x:Name="LicModeCombo" Height="30" Margin="0,0,0,6" FontSize="12"/>
-          <TextBox x:Name="LicServersBox" Height="26" Margin="0,0,0,4" FontSize="12" FlowDirection="LeftToRight" Visibility="Collapsed"/>
-          <TextBlock x:Name="LicServersHint" TextWrapping="Wrap" Foreground="#8A8F99" FontSize="11" Margin="0,0,0,6" Visibility="Collapsed"/>
-          <StackPanel Orientation="Horizontal">
-            <Button x:Name="LicApply" Content="" Height="34" Padding="12,0" Margin="0,0,6,0" Background="#E41E2E" Foreground="White" FontWeight="SemiBold" BorderBrush="#E41E2E"/>
-            <Button x:Name="LicRefresh" Content="" Height="34" Padding="12,0"/>
-          </StackPanel>
-          <Separator Margin="0,6,0,6"/>
-          <Button x:Name="BtnReport" Content="" Height="34" Margin="0,0,0,6" FontSize="13"/>
-          <Button x:Name="BtnBundle" Content="" Height="34" Margin="0,0,0,6" FontSize="13"/>
-          <TextBlock x:Name="TipText" TextWrapping="Wrap" Foreground="#8A8F99" FontSize="11" Margin="0,10,0,0"/>
-        </StackPanel>
-        </ScrollViewer>
+      <!-- Sidebar -->
+      <Border Grid.Column="0" Background="#121923" BorderBrush="#222C3A" BorderThickness="1"
+              CornerRadius="11" Padding="14" Margin="0,0,16,0">
+        <DockPanel LastChildFill="True">
+          <Border DockPanel.Dock="Bottom" Background="#1B1217" BorderBrush="#4B222A" BorderThickness="1"
+                  CornerRadius="8" Padding="9" Margin="0,8,0,0">
+            <StackPanel>
+              <TextBlock x:Name="DangerLabelText" Text="DANGER ZONE" Foreground="#8C6670" FontSize="9"
+                         FontWeight="Bold" Margin="0,0,0,4"/>
+              <Button x:Name="BtnPurge" Style="{StaticResource DangerButton}" Tag="&#xE74D;"
+                      Content="Remove Autodesk completely"/>
+              <TextBlock x:Name="RemoveDesc" Text="Uninstalls apps, licensing, services, registry entries and crack leftovers. Backup first."
+                         Foreground="#B58A91" FontSize="9" TextWrapping="Wrap" Margin="0,5,0,0"/>
+            </StackPanel>
+          </Border>
+
+          <ScrollViewer VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled" PanningMode="VerticalOnly" x:Name="SideScroll">
+            <StackPanel>
+              <StackPanel x:Name="ActionsPanel">
+                <DockPanel Margin="0,0,0,8">
+                  <TextBlock x:Name="ActionsHint" DockPanel.Dock="Right" Text="Start with a scan"
+                             Style="{StaticResource MutedText}" VerticalAlignment="Bottom"/>
+                  <TextBlock x:Name="ActionsLabel" Text="Quick actions" Style="{StaticResource SectionLabel}"/>
+                </DockPanel>
+
+                <Button x:Name="BtnDiag" Style="{StaticResource PrimaryActionButton}"/>
+                <Button x:Name="BtnBackup" Style="{StaticResource ActionButton}"/>
+                <Button x:Name="BtnClean" Style="{StaticResource ActionButton}"/>
+                <Button x:Name="BtnRepair" Style="{StaticResource ActionButton}"/>
+                <Button x:Name="BtnUndo" Style="{StaticResource ActionButton}"/>
+
+                <Border Height="1" Background="#1A2330" Margin="0,6,0,8"/>
+              </StackPanel>
+              <Button x:Name="LicToggle" Style="{StaticResource LicenseHeaderButton}" ToolTip="License mode">
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock x:Name="LicModeLabel" Text="License mode" Style="{StaticResource SectionLabel}" VerticalAlignment="Center"/>
+                  <TextBlock x:Name="LicCurrent" Grid.Column="1" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                             Foreground="#9FB0C4" FontSize="10.5" Margin="8,0,8,0" MaxWidth="150" VerticalAlignment="Center"/>
+                  <TextBlock x:Name="LicChevron" Grid.Column="2" Text="&#x2304;" Foreground="#7D8CA1" FontSize="12"
+                             VerticalAlignment="Center"/>
+                </Grid>
+              </Button>
+
+              <Border x:Name="LicCard" Background="#0E141C" BorderBrush="#202B3A" BorderThickness="1" CornerRadius="9"
+                      Padding="10" Visibility="Collapsed">
+                <StackPanel>
+                  <TextBlock x:Name="LicProductFieldLabel" Text="Product" Style="{StaticResource FieldLabel}"/>
+                  <ComboBox x:Name="LicProductCombo" Style="{StaticResource DarkComboBox}" DisplayMemberPath="Display"/>
+                  <TextBlock x:Name="LicModeFieldLabel" Text="Mode" Style="{StaticResource FieldLabel}"/>
+                  <ComboBox x:Name="LicModeCombo" Style="{StaticResource DarkComboBox}"/>
+                  <TextBox x:Name="LicServersBox" Style="{StaticResource DarkTextBox}" Margin="0,6,0,4"
+                           FlowDirection="LeftToRight" Visibility="Collapsed"/>
+                  <TextBlock x:Name="LicServersHint" TextWrapping="Wrap" Foreground="#8A8F99" FontSize="10.5"
+                             Margin="0,0,0,6" Visibility="Collapsed"/>
+                  <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*"/>
+                      <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="LicApply" Grid.Column="0" Style="{StaticResource SmallButton}" Margin="0,0,6,0"/>
+                    <Button x:Name="LicRefresh" Grid.Column="1" Style="{StaticResource SmallButton}"/>
+                  </Grid>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+        </DockPanel>
       </Border>
 
-      <!-- Log output -->
-      <Border Grid.Column="1" Background="#16181C" CornerRadius="10">
-        <DockPanel>
-          <Border DockPanel.Dock="Top" Background="#1E2126" CornerRadius="10,10,0,0" Padding="14,10">
-            <TextBlock x:Name="LogTitle" Text="" Foreground="#DDE1E7" FontSize="13" FontWeight="SemiBold"/>
+      <!-- Log panel -->
+      <Border Grid.Column="1" Background="#0B1017" BorderBrush="#202B3A" BorderThickness="1" CornerRadius="11">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="48"/>
+            <RowDefinition Height="36"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="38"/>
+          </Grid.RowDefinitions>
+
+          <Border Grid.Row="0" Background="#121923" BorderBrush="#202B3A" BorderThickness="0,0,0,1" Padding="15,0">
+            <Grid>
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Ellipse Width="7" Height="7" Fill="#37D39B" Margin="0,0,9,0"/>
+                <TextBlock x:Name="LogTitle" Text="Activity log" Foreground="#DBE4F1" FontSize="12" FontWeight="SemiBold"/>
+                <TextBlock x:Name="LogLiveText" Text="Live output" Foreground="#67768A" FontSize="10" Margin="8,0,0,0"
+                           VerticalAlignment="Center"/>
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Button x:Name="BtnReport" Style="{StaticResource LogToolButton}" Tag="&#xE8A5;" Content="Report"/>
+                <Button x:Name="BtnBundle" Style="{StaticResource LogToolButton}" Tag="&#xE7B8;" Content="Bundle"/>
+                <Button x:Name="BtnCopyLog" Style="{StaticResource LogToolButton}" Tag="&#xE8C8;" Content="Copy"/>
+                <Button x:Name="BtnClearLog" Style="{StaticResource LogToolButton}" Tag="&#xE711;" Content="Clear"/>
+              </StackPanel>
+            </Grid>
           </Border>
-          <TextBox x:Name="TxtLog" Background="Transparent" Foreground="#D6DEE8" BorderThickness="0"
-                   FontFamily="Consolas" FontSize="12.5" Padding="14,10"
+
+          <Border Grid.Row="1" Background="#0E151E" BorderBrush="#18222E" BorderThickness="0,0,0,1" Padding="15,0">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+              <Border Style="{StaticResource ChipBorder}">
+                <StackPanel Orientation="Horizontal">
+                  <Ellipse Width="5" Height="5" Fill="#37D39B" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                  <TextBlock x:Name="ChipWindows" Text="Windows" Foreground="#8FDCB9" FontSize="9.5" FontWeight="SemiBold"/>
+                </StackPanel>
+              </Border>
+              <Border Style="{StaticResource ChipBorder}">
+                <StackPanel Orientation="Horizontal">
+                  <Ellipse x:Name="ChipAdminDot" Width="5" Height="5" Fill="#37D39B" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                  <TextBlock x:Name="ChipAdmin" Text="Administrator" Foreground="#8FDCB9" FontSize="9.5" FontWeight="SemiBold"/>
+                </StackPanel>
+              </Border>
+              <Border Style="{StaticResource ChipBorder}">
+                <StackPanel Orientation="Horizontal">
+                  <Ellipse Width="5" Height="5" Fill="#7AA7FF" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                  <TextBlock x:Name="ChipLocal" Text="Local only" Foreground="#9CAABD" FontSize="9.5" FontWeight="SemiBold"/>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </Border>
+
+          <TextBox x:Name="TxtLog" Grid.Row="2" Background="Transparent" BorderThickness="0"
+                   Foreground="#C3CEDD" FontFamily="Consolas" FontSize="12" Padding="15,12"
                    IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
-                   FlowDirection="LeftToRight"/>
-        </DockPanel>
+                   HorizontalScrollBarVisibility="Disabled" FlowDirection="LeftToRight"/>
+
+          <Border Grid.Row="3" Background="#0D141C" BorderBrush="#18222E" BorderThickness="0,1,0,0" Padding="15,7">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="&#xE72E;" FontFamily="Segoe MDL2 Assets" Foreground="#7690B6" FontSize="12"
+                         Margin="0,0,7,0" VerticalAlignment="Center"/>
+              <TextBlock x:Name="TipText" Grid.Column="1" Foreground="#6F7E92" FontSize="10" TextWrapping="Wrap"
+                         VerticalAlignment="Center"/>
+            </Grid>
+          </Border>
+
+          <Border Grid.Row="4" Background="#0E141C" BorderBrush="#19232F" BorderThickness="0,1,0,0" Padding="15,0">
+            <Grid>
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Ellipse Width="6" Height="6" Fill="#37D39B" Margin="0,0,7,0"/>
+                <TextBlock x:Name="StatusText" Foreground="#94A3B6" FontSize="10" FontWeight="SemiBold"/>
+              </StackPanel>
+              <TextBlock Text="%ProgramData%\Autodesk\AdskLicensingService" Foreground="#526277"
+                         FontFamily="Consolas" FontSize="9.5" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            </Grid>
+          </Border>
+        </Grid>
       </Border>
     </Grid>
 
     <!-- Footer -->
-    <Border Grid.Row="2" Background="#E7E9ED" Padding="18,10">
-      <DockPanel>
-        <TextBlock x:Name="CopyText" DockPanel.Dock="Left" Text="© Unlock Digital - By Eng. Eslam Ashraf"
-                   Foreground="#6B7280" FontSize="11.5" VerticalAlignment="Center" Margin="0,0,16,0"/>
-        <ProgressBar x:Name="Bar" DockPanel.Dock="Right" Width="220" Height="8" IsIndeterminate="False"/>
-        <TextBlock x:Name="StatusText" Text="" Foreground="#333" VerticalAlignment="Center"/>
-      </DockPanel>
+    <Border Grid.Row="2" Background="#0E141C" BorderBrush="#1B2532" BorderThickness="0,1,0,0" Padding="16,0" Height="32">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <TextBlock x:Name="CopyText" Text="© Unlock Digital - By Eng. Eslam Ashraf" Foreground="#617084"
+                   FontSize="9.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+        <ProgressBar x:Name="Bar" Grid.Column="1" Width="150" Height="5" Foreground="#E41E2E"
+                     Background="#1D2836" BorderThickness="0" VerticalAlignment="Center" Margin="12,0,18,0"/>
+        <TextBlock Grid.Column="2" Text="Windows 10/11 · 64-bit" Foreground="#7E8DA2" FontSize="9.5"
+                   VerticalAlignment="Center"/>
+      </Grid>
     </Border>
   </Grid>
 </Window>
@@ -356,6 +1000,20 @@ function T { param([string]$k) $L[$script:lang][$k] }
 
 $reader = New-Object System.Xml.XmlNodeReader $xaml
 $win    = [System.Windows.Markup.XamlReader]::Load($reader)
+
+# Use the product mark in the title bar too, including when the GUI is run
+# directly as a .ps1 during development (the compiled exe gets it embedded).
+$iconPath = Join-Path $here 'AdskDoctor.ico'
+if (Test-Path -LiteralPath $iconPath) {
+    try {
+        $ico = New-Object System.Drawing.Icon($iconPath, 32, 32)
+        $win.Icon = [System.Windows.Interop.Imaging]::CreateBitmapSourceFromHIcon(
+            $ico.Handle,
+            [System.Windows.Int32Rect]::Empty,
+            [System.Windows.Media.Imaging.BitmapSizeOptions]::FromEmptyOptions())
+        $ico.Dispose()
+    } catch { }
+}
 
 # The default height (690 DIP) is taller than the usable work area of a common
 # laptop at 125-150% scaling, which pushes the bottom action bar off-screen.
@@ -367,9 +1025,20 @@ try {
 } catch { }
 
 $LogoImage  = $win.FindName('LogoImage')
+$LogoTile   = $win.FindName('LogoTile')
 $BrandText  = $win.FindName('BrandText')
 $SubTitle   = $win.FindName('SubTitle')
 $ActionsLabel = $win.FindName('ActionsLabel')
+$ActionsHint  = $win.FindName('ActionsHint')
+$ActionsPanel = $win.FindName('ActionsPanel')
+$SideScroll  = $win.FindName('SideScroll')
+$DangerLabelText = $win.FindName('DangerLabelText')
+$RemoveDesc = $win.FindName('RemoveDesc')
+$LogLiveText = $win.FindName('LogLiveText')
+$ChipWindows = $win.FindName('ChipWindows')
+$ChipAdmin   = $win.FindName('ChipAdmin')
+$ChipAdminDot = $win.FindName('ChipAdminDot')
+$ChipLocal   = $win.FindName('ChipLocal')
 $TipText    = $win.FindName('TipText')
 $TxtLog     = $win.FindName('TxtLog')
 $StatusText = $win.FindName('StatusText')
@@ -379,31 +1048,68 @@ $LicProductCombo = $win.FindName('LicProductCombo')
 $LicModeCombo    = $win.FindName('LicModeCombo')
 $LicCurrent      = $win.FindName('LicCurrent')
 $LicModeLabel    = $win.FindName('LicModeLabel')
+$LicToggle       = $win.FindName('LicToggle')
+$LicCard         = $win.FindName('LicCard')
+$LicChevron      = $win.FindName('LicChevron')
+$LicProductFieldLabel = $win.FindName('LicProductFieldLabel')
+$LicModeFieldLabel    = $win.FindName('LicModeFieldLabel')
 $LicServersBox   = $win.FindName('LicServersBox')
 $LicServersHint  = $win.FindName('LicServersHint')
 $buttons    = @{}
-foreach ($n in 'BtnDiag','BtnBackup','BtnClean','BtnRepair','BtnUndo','BtnPurge','BtnUpdate','BtnReport','BtnBundle','BtnLang','LicApply','LicRefresh') {
+foreach ($n in 'BtnDiag','BtnBackup','BtnClean','BtnRepair','BtnUndo','BtnPurge','BtnUpdate','BtnReport','BtnBundle','BtnLang','BtnCopyLog','BtnClearLog','LicApply','LicRefresh') {
     $buttons[$n] = $win.FindName($n)
 }
 
 # The version comes from the compiled exe, so a support request can name it.
-# Running the .ps1 directly (development) has no version to report.
-$script:appVersion = 'dev'
+# Running the .ps1 directly (development) has no version to report, so keep
+# the release version instead of showing powershell.exe's Windows build.
+$script:appVersion = '1.5.4'
 try {
-    $fvi = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileVersionInfo
-    if ($fvi -and $fvi.FileVersion) { $script:appVersion = $fvi.FileVersion }
+    $proc = [System.Diagnostics.Process]::GetCurrentProcess()
+    if ($proc.ProcessName -notin @('powershell', 'pwsh')) {
+        $fvi = $proc.MainModule.FileVersionInfo
+        if ($fvi -and $fvi.FileVersion) { $script:appVersion = $fvi.FileVersion }
+    }
 } catch {}
+
+# Environment chips (always local, never guessed)
+$osv = [System.Environment]::OSVersion.Version
+$script:winNum = if ($osv.Build -ge 22000) { '11' } elseif ($osv.Major -ge 10) { '10' } else { '' }
+$script:isAdmin = $false
+try {
+    $id = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+    $pr = New-Object System.Security.Principal.WindowsPrincipal($id)
+    $script:isAdmin = $pr.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+} catch {}
+$brushConverter = New-Object System.Windows.Media.BrushConverter
+$script:chipGreen = $brushConverter.ConvertFromString('#8FDCB9')
+$script:chipAmber = $brushConverter.ConvertFromString('#E7C485')
+$script:dotGreen  = $brushConverter.ConvertFromString('#37D39B')
+$script:dotAmber  = $brushConverter.ConvertFromString('#F5B84B')
 
 # logo
 $script:hasLogo = $false
-$logoPath = Join-Path $here 'unlock-logo.png'
+$logoPath = Join-Path $here 'adskdoctor-logo.png'
 if (Test-Path -LiteralPath $logoPath) {
     try {
         $img = New-Object System.Windows.Media.Imaging.BitmapImage
         $img.BeginInit(); $img.UriSource = New-Object System.Uri($logoPath); $img.CacheOption = 'OnLoad'; $img.EndInit()
         $LogoImage.Source = $img
         $LogoImage.Visibility = 'Visible'
+        $LogoTile.Visibility = 'Visible'
         $script:hasLogo = $true
+    } catch {}
+}
+
+# Each action button carries a small icon, a title and a one-line explanation.
+# A hashtable is used so WPF can bind to the keys with Path=[Key].
+function Set-ActionContent {
+    param($Button, [string]$Glyph, [string]$Title, [string]$Description)
+    $Button.Content = @{ Glyph = $Glyph; Title = $Title; Desc = $Description }
+    $Button.ToolTip = $Description
+    try {
+        [System.Windows.Automation.AutomationProperties]::SetName($Button, $Title)
+        [System.Windows.Automation.AutomationProperties]::SetHelpText($Button, $Description)
     } catch {}
 }
 
@@ -414,28 +1120,44 @@ function Apply-Language {
     $win.Title = T 'windowTitle'
     $SubTitle.Text = (T 'subtitle') + '   ·  v' + $script:appVersion
     if ($script:hasLogo) { $BrandText.Text = (T 'brandSmall'); $BrandText.FontSize = 22 }
-    else { $BrandText.Text = (T 'brand'); $BrandText.FontSize = 26 }
+    else { $BrandText.Text = (T 'brand'); $BrandText.FontSize = 24 }
     $ActionsLabel.Text = T 'actions'
-    $buttons['BtnDiag'].Content   = T 'bDiag'
-    $buttons['BtnBackup'].Content = T 'bBackup'
-    $buttons['BtnClean'].Content  = T 'bClean'
-    $buttons['BtnRepair'].Content = T 'bRepair'
-    $buttons['BtnUndo'].Content   = T 'bUndo'
-    $buttons['BtnReport'].Content = T 'bReport'
+    $ActionsHint.Text = T 'actionsHint'
+    Set-ActionContent $buttons['BtnDiag']   ([char]0xE721) (T 'bDiag')   (T 'bDiagDesc')
+    Set-ActionContent $buttons['BtnBackup'] ([char]0xE896) (T 'bBackup') (T 'bBackupDesc')
+    Set-ActionContent $buttons['BtnClean']  ([char]0xE74D) (T 'bClean')  (T 'bCleanDesc')
+    Set-ActionContent $buttons['BtnRepair'] ([char]0xE90F) (T 'bRepair') (T 'bRepairDesc')
+    Set-ActionContent $buttons['BtnUndo']   ([char]0xE7A7) (T 'bUndo')   (T 'bUndoDesc')
+    $buttons['BtnReport'].Content = T 'bReportShort'
+    $buttons['BtnReport'].ToolTip = T 'reportTip'
+    $buttons['BtnBundle'].Content = T 'bBundleShort'
+    $buttons['BtnBundle'].ToolTip = T 'bundleTip'
+    $buttons['BtnCopyLog'].Content = T 'copyLog'
+    $buttons['BtnClearLog'].Content = T 'clearLog'
     $buttons['BtnPurge'].Content = T 'bPurge'
     $buttons['BtnPurge'].ToolTip = T 'purgeTip'
     $buttons['BtnUpdate'].Content = T 'bUpdate'
     $buttons['BtnUpdate'].ToolTip = T 'updateTip'
-    $buttons['BtnBundle'].Content = T 'bBundle'
-    $buttons['BtnBundle'].ToolTip = T 'bundleTip'
     $buttons['BtnLang'].Content   = T 'bLang'
     $LicModeLabel.Text = T 'licModeTitle'
+    $LicToggle.ToolTip = T 'licModeTitle'
+    try { [System.Windows.Automation.AutomationProperties]::SetName($LicToggle, (T 'licModeTitle')) } catch {}
+    $LicProductFieldLabel.Text = T 'licProductField'
+    $LicModeFieldLabel.Text = T 'licModeField'
+    $DangerLabelText.Text = T 'dangerZone'
+    $RemoveDesc.Text = T 'removeDesc'
+    $LogLiveText.Text = T 'logLive'
     $buttons['LicApply'].Content = T 'licApply'
     $buttons['LicRefresh'].Content = T 'licRefresh'
     $LicServersHint.Text = T 'licServersHint'
+    $ChipWindows.Text = if ($script:lang -eq 'ar') { 'ويندوز ' + $script:winNum } else { 'Windows ' + $script:winNum }
+    $ChipAdmin.Text = if ($script:isAdmin) { T 'chipAdmin' } else { T 'chipStandard' }
+    $ChipLocal.Text = T 'chipLocal'
+    $ChipAdmin.Foreground = if ($script:isAdmin) { $script:chipGreen } else { $script:chipAmber }
+    $ChipAdminDot.Fill = if ($script:isAdmin) { $script:dotGreen } else { $script:dotAmber }
     Update-LicModeItems
     Update-LicProductItems
-    $TipText.Text = T 'tip'
+    $TipText.Text = T 'logTip'
     $win.FlowDirection = if ($script:lang -eq 'ar') { [System.Windows.FlowDirection]::RightToLeft } else { [System.Windows.FlowDirection]::LeftToRight }
     if (-not $script:busy) {
         $LogTitle.Text = T 'logTitle'
@@ -558,7 +1280,7 @@ function Run-Task {
     Add-Log ''
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = (Get-Command powershell).Source
+    $psi.FileName = (Get-PowerShellExe)
     $psi.Arguments = (@('-NoProfile','-ExecutionPolicy','Bypass') + $Arguments | ForEach-Object { Quote-Arg $_ }) -join ' '
     $psi.UseShellExecute = $false
     $psi.RedirectStandardOutput = $true
@@ -623,14 +1345,26 @@ function Get-SelectedLicMode {
 }
 function Update-LicCurrent {
     if ($script:busy) { return }
-    if ($script:licMessageKey) { $LicCurrent.Text = T $script:licMessageKey; return }
+    if ($script:licMessageKey) {
+        $shortKey = switch ($script:licMessageKey) {
+            'licMissing'    { 'licMissingShort' }
+            'licNoHelper'   { 'licNoHelperShort' }
+            'licNoProducts' { 'licNoProductsShort' }
+            'licListFailed' { 'licListFailedShort' }
+            default         { 'licErrorShort' }
+        }
+        $LicCurrent.Text = T $shortKey
+        $LicCurrent.ToolTip = T $script:licMessageKey
+        return
+    }
     $it = $LicProductCombo.SelectedItem
-    if (-not $it) { $LicCurrent.Text = ''; return }
+    if (-not $it) { $LicCurrent.Text = ''; $LicCurrent.ToolTip = $null; return }
     $p = $it.Product
     $txt = (T 'licCurrent') -f (Get-MethodLabel $p.method)
     $srv = @($p.servers)
     if ($p.method -eq 'NETWORK' -and $srv.Count -gt 0) { $txt = $txt + '  ·  ' + ($srv -join ', ') }
     $LicCurrent.Text = $txt
+    $LicCurrent.ToolTip = $txt
 }
 function Update-LicServersVisibility {
     $vis = if ((Get-SelectedLicMode) -eq 'NETWORK') { 'Visible' } else { 'Collapsed' }
@@ -677,7 +1411,7 @@ function Load-LicProducts {
         return
     }
     $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = (Get-Command powershell).Source
+    $psi.FileName = (Get-PowerShellExe)
     $psi.Arguments = (@('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $script:licScript, '-List', '-Json') | ForEach-Object { Quote-Arg $_ }) -join ' '
     $psi.UseShellExecute = $false
     $psi.RedirectStandardOutput = $true
@@ -740,6 +1474,21 @@ $buttons['BtnLang'].Add_Click({
     Apply-Language
 })
 
+# License mode stays as a compact summary by default, so the sidebar does not
+# need a permanent scrollbar on smaller screens. Expand it only when needed.
+$LicToggle.Add_Click({
+    if ($LicCard.Visibility -eq [System.Windows.Visibility]::Visible) {
+        $LicCard.Visibility = [System.Windows.Visibility]::Collapsed
+        $ActionsPanel.Visibility = [System.Windows.Visibility]::Visible
+        $LicChevron.Text = [string][char]0x2304
+    } else {
+        $LicCard.Visibility = [System.Windows.Visibility]::Visible
+        $ActionsPanel.Visibility = [System.Windows.Visibility]::Collapsed
+        $LicChevron.Text = [string][char]0x2303
+    }
+    $SideScroll.ScrollToTop()
+})
+
 $buttons['BtnDiag'].Add_Click({
     Run-Task -Title (T 'bDiag') `
         -Arguments @('-File', (Join-Path $here 'AdskDoctor.ps1'), '-Html', '-Export', (Join-Path $here 'report.html')) `
@@ -766,7 +1515,7 @@ function Get-RepairCheck {
     $oldNolog = $env:ADSKDOCTOR_NOLOG
     try {
         $env:ADSKDOCTOR_NOLOG = '1'
-        $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $RepairPath -CheckOnly 2>&1
+        $out = & (Get-PowerShellExe) -NoProfile -ExecutionPolicy Bypass -File $RepairPath -CheckOnly 2>&1
         $m = [regex]::Match(($out -join "`n"), 'CHECKRESULT missing=([^\r\n]*)')
         if (-not $m.Success) { return 'unknown' }
         return $m.Groups[1].Value.Trim()
@@ -832,6 +1581,19 @@ $buttons['BtnReport'].Add_Click({
     if (Test-Path -LiteralPath $rep) { Start-Process $rep } else { [System.Windows.MessageBox]::Show((T 'noReport'),'UNLOCK DIGITAL') | Out-Null }
 })
 
+$buttons['BtnCopyLog'].Add_Click({
+    try {
+        if ($TxtLog.SelectionLength -gt 0) { $TxtLog.Copy() }
+        else { [System.Windows.Clipboard]::SetText($TxtLog.Text) }
+    } catch { }
+})
+
+$buttons['BtnClearLog'].Add_Click({
+    if ($script:busy) { [System.Windows.MessageBox]::Show((T 'busyMsg'), 'UNLOCK DIGITAL') | Out-Null; return }
+    $TxtLog.Clear()
+    $StatusText.Text = T 'statusReady'
+})
+
 # One file to send to support: the report + the licensing logs. The folder is
 # opened afterwards so the zip is easy to find.
 $buttons['BtnBundle'].Add_Click({
@@ -857,15 +1619,36 @@ function Get-UpdateResult {
         if ($s -match '^UPDATERESULT ') { $line = $s.Trim(); break }
     }
     if (-not $line) { return $null }
+    $body = $line.Substring('UPDATERESULT '.Length).Trim()
     $info = @{}
-    foreach ($m in [regex]::Matches($line, '(\w+)=(\S*)')) { $info[$m.Groups[1].Value] = $m.Groups[2].Value }
+
+    # error= is free text and runs to the end of the line.
+    $m = [regex]::Match($body, '(?:^|\s)error=(.*)$')
+    if ($m.Success) {
+        $info['error'] = $m.Groups[1].Value.Trim()
+        $body = $body.Substring(0, $m.Index).Trim()
+    }
+
+    # staged / apply are paths and may contain spaces. They are followed by a
+    # known key, so stop at the next key= rather than at the first space.
+    foreach ($key in @('staged', 'apply')) {
+        $m = [regex]::Match($body, '(?:^|\s)' + $key + '=(.*?)(?=\s+(?:current|latest|available|source|version|apply|staged|error)=|$)')
+        if ($m.Success) {
+            $info[$key] = $m.Groups[1].Value.Trim()
+            $body = ($body.Substring(0, $m.Index) + ' ' + $body.Substring($m.Index + $m.Length)).Trim()
+        }
+    }
+
+    foreach ($m in [regex]::Matches($body, '(\w+)=(\S+)')) {
+        $info[$m.Groups[1].Value] = $m.Groups[2].Value
+    }
     return $info
 }
 function Get-UpdateCheck {
     param([string]$CurrentVersion)
     $upd = Join-Path $here 'Update.ps1'
     try {
-        $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $upd -Check -CurrentVersion $CurrentVersion 2>&1
+        $out = & (Get-PowerShellExe) -NoProfile -ExecutionPolicy Bypass -File $upd -Check -CurrentVersion $CurrentVersion 2>&1
         return (Get-UpdateResult -Out $out)
     } catch { return $null }
 }
@@ -896,7 +1679,9 @@ $buttons['BtnUpdate'].Add_Click({
             if ($check -and $check['error']) { $why = $check['error'] }
             Stop-UpdateUi
             Add-Log ('>> ' + (T 'updateFailed') + $why)
-            [System.Windows.MessageBox]::Show(((T 'updateFailed') + $why), (T 'updateTitle')) | Out-Null
+            $shown = (T 'updateUnavailable')
+            if ($why) { $shown += "`n`n" + $why }
+            [System.Windows.MessageBox]::Show($shown, (T 'updateTitle')) | Out-Null
             return
         }
         if ($check['available'] -ne '1') {
@@ -908,7 +1693,7 @@ $buttons['BtnUpdate'].Add_Click({
         $q = [System.Windows.MessageBox]::Show(((T 'updateAvailable') -f $check['latest'], $check['current']), (T 'updateTitle'), 'YesNo', 'Question')
         if ($q -ne 'Yes') { Stop-UpdateUi; return }
         Set-UpdateStatus (T 'updateDownloading')
-        $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $upd -Download -CurrentVersion $script:appVersion 2>&1
+        $out = & (Get-PowerShellExe) -NoProfile -ExecutionPolicy Bypass -File $upd -Download -CurrentVersion $script:appVersion 2>&1
         $res = Get-UpdateResult -Out $out
         if (-not $res -or -not $res['staged'] -or $res['error']) {
             $why = 'unknown'
@@ -924,8 +1709,9 @@ $buttons['BtnUpdate'].Add_Click({
         [System.Windows.MessageBox]::Show(((T 'updateReady') -f $res['version']), (T 'updateTitle')) | Out-Null
         $applyArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $res['apply'],
                        '-WaitPid', $PID, '-StagingDir', $res['staged'], '-TargetDir', $here,
-                       '-ExeName', 'UNLOCK-DIGITAL-AdskDoctor.exe')
-        Start-Process -FilePath 'powershell.exe' -ArgumentList $applyArgs -WindowStyle Hidden
+                       '-ExeName', 'UNLOCK-DIGITAL-AdskDoctor.exe') |
+                     ForEach-Object { Quote-Arg ([string]$_) }
+        Start-Process -FilePath (Get-PowerShellExe) -ArgumentList $applyArgs -WindowStyle Hidden
         $win.Close()
     } catch {
         Stop-UpdateUi

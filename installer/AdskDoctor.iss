@@ -16,7 +16,7 @@
   #define OutputDir "..\releases"
 #endif
 #ifndef IconFile
-  #define IconFile "..\unlock-logo.ico"
+  #define IconFile "..\AdskDoctor.ico"
 #endif
 #ifndef LicenseFile
   #define LicenseFile "..\LICENSE"
@@ -68,8 +68,11 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyExe}"; IconFilename: "{app}\AdskDoctor.ico"; WorkingDir: "{app}"; Comment: "{#MyPublisher} - {#MyAppName}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyExe}"; IconFilename: "{app}\AdskDoctor.ico"; WorkingDir: "{app}"; Tasks: desktopicon
+; Smart App Control blocks new unsigned EXEs on Windows 11. The shortcut
+; therefore starts the GUI through the Microsoft-signed PowerShell host
+; (via Run-GUI.vbs), not through the unsigned app exe.
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\Run-GUI.vbs"""; IconFilename: "{app}\AdskDoctor.ico"; WorkingDir: "{app}"; Comment: "{#MyPublisher} - {#MyAppName}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\Run-GUI.vbs"""; IconFilename: "{app}\AdskDoctor.ico"; WorkingDir: "{app}"; Tasks: desktopicon
 
 ; The app exe carries a requireAdministrator manifest (Build-Release.ps1
 ; compiles it with -requireAdmin). With the postinstall flag Inno's default is
@@ -79,8 +82,10 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyExe}"; IconFilename: "{
 ; path: UAC consent elevates Setup, but the original token stays non-elevated).
 ; runascurrentuser makes the app inherit Setup's elevated credentials instead,
 ; so the "Launch" checkbox works - and without a second UAC prompt.
+; Launch the script host, not the unsigned exe, for the same Smart App Control
+; reason as the shortcuts above.
 [Run]
-Filename: "{app}\{#MyExe}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent runascurrentuser
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File ""{app}\AdskDoctor-GUI.ps1"""; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent runascurrentuser
 
 ; A scan writes report.html / report.json next to the application. Removing them
 ; lets Inno Setup delete the now-empty folder, so an uninstall leaves nothing

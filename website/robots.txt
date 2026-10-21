@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://adskdoctor.unlockdigital.online/sitemap.xml

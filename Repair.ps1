@@ -7,15 +7,26 @@
     Order matters - an ADLS installer will not replace a running service, and
     'Current' must not be re-pointed before its replacement is installed:
       1. Pre-flight checks (admin, pending reboot, Windows Installer)
-      2. Inspect the installed components (read-only; -CheckOnly exits here)
-      3. Stop the licensing service and its agent processes
-      4. Reset the ADLS service state        -> fixes "Connection Lost"
-      5. Install the missing official components (service is stopped)
-      6. Repair the licensing build folder ('Current' junction) and remove
+      2. Clear stale AutoCAD 2027 NLM installer pointers (backed up first)
+      3. Inspect the installed components (read-only; -CheckOnly exits here)
+      4. Stop the licensing service and its agent processes
+      5. Reset the ADLS service state        -> fixes "Connection Lost"
+      6. Install the missing official components (service is stopped)
+      7. Repair the licensing build folder ('Current' junction) and remove
          non-Autodesk binaries left by an activator
-      7. Restart + fix startup of the services (ADLS, Access)
-      8. Clear the licensing/token cache and the sign-in window profile
-      9. Verify everything (service + files + WebView2 + connectivity)
+      8. Restart + fix startup of the services (ADLS, Access)
+      9. Clear the licensing/token cache and the sign-in window profile
+     10. Verify everything (service + files + WebView2 + connectivity)
+
+    The AutoCAD 2027 setup error "the Network License Manager version you use
+    does not meet the minimum requirements" is often caused by stale local NLM
+    pointers, not by the installed NLM itself. Step 2 removes only those
+    pointers (nlm-server-info.json, licpath.lic, old NLM registry keys and
+    ADSKFLEX_LICENSE_FILE / ADSK_LICENSE_FILE / LICPATH / ACADSERVER) after
+    copying them to a dedicated backup with a runnable UNDO.ps1. It never
+    removes the NLM service or its installation. If this PC is the license
+    server, update NLM to 11.19.9.0+ instead; use -SkipNlmFix to leave the
+    pointers alone.
 
     Official installers: point -InstallerDir at a folder that contains them, or
     pass each path explicitly. They are matched by name, and the product's own
@@ -37,6 +48,7 @@
       .\Repair.ps1 -CheckOnly                        # report what is missing, exit
       .\Repair.ps1 -Apply                            # reset + verify
       .\Repair.ps1 -Apply -AllowDownload             # fetch + install missing components
+      .\Repair.ps1 -Apply -SkipNlmFix                # leave NLM pointers untouched
       .\Repair.ps1 -Apply -InstallerDir "D:\Installers"
       .\Repair.ps1 -Apply -AdlsInstaller "C:\...\Autodesk_Licensing_Service.exe"
       .\Repair.ps1 -Apply -IdentityInstaller "C:\...\AdskIdentityManager-Installer.exe"
@@ -55,6 +67,7 @@ param(
     [string]$SilentArgs = '/S',
     [switch]$SkipReset,
     [switch]$SkipConnectivity,
+    [switch]$SkipNlmFix,
     [switch]$AllowDownload,
     [switch]$CheckOnly
 )
@@ -286,6 +299,8 @@ function Test-WebView2 {
 }
 
 $isAdmin = Test-IsAdmin
+$nlmCommon = Join-Path $PSScriptRoot 'NlmCommon.ps1'
+if (Test-Path -LiteralPath $nlmCommon) { . $nlmCommon }
 Write-Host ''
 Write-Host '============================================================' -ForegroundColor Cyan
 Write-Host '   Autodesk Licensing Doctor  -  Phase 4: Repair' -ForegroundColor Cyan
@@ -307,6 +322,28 @@ if ($pending) { Write-Host '  WARNING: a reboot is pending - reboot first for be
 else { Info 'No pending reboot' }
 $msi = Get-Service msiserver -ErrorAction SilentlyContinue
 if ($msi) { Info 'Windows Installer service available' } else { Write-Host '  Windows Installer service not found' -ForegroundColor Yellow }
+
+# ---------------------------------------------------------------------------
+# 1b. AutoCAD 2027 NLM install blocker (targeted, backed up, reversible)
+#     The 2027 installer refuses to start when stale local NLM pointers make
+#     it think an old license server is configured. This removes only those
+#     pointers - never the NLM service or its installation.
+# ---------------------------------------------------------------------------
+Section 'AutoCAD 2027 NLM install blocker'
+if ($SkipNlmFix) {
+    Info 'skipped (-SkipNlmFix)'
+} elseif (Get-Command Invoke-NlmBlockerFix -ErrorAction SilentlyContinue) {
+    $nlmResult = Invoke-NlmBlockerFix -Apply:$Apply -BackupRoot (Join-Path $PSScriptRoot 'backups') -NoHeader
+    if ($nlmResult -and @($nlmResult.Errors).Count -gt 0) {
+        foreach ($e in @($nlmResult.Errors)) {
+            Write-Host ('  [ WARN ] {0}' -f $e) -ForegroundColor Yellow
+        }
+        $script:Errors += @($nlmResult.Errors).Count
+    }
+    if ($nlmResult.Backup) { Info ('NLM backup: {0}' -f $nlmResult.Backup) }
+} else {
+    Info 'NlmCommon.ps1 not present - NLM blocker check skipped'
+}
 
 # ---------------------------------------------------------------------------
 # 2. Component state (read-only; -CheckOnly exits here)

@@ -21,24 +21,31 @@ Windows 10 / 11 · GUI in **Arabic + English** · no installation required.
 
 ## Download
 
+> **Status (21 Oct 2026):** v1.5.4 is built locally and now includes the
+> AutoCAD 2027 NLM installer-blocker fix plus the stripped-PATH fixes for
+> Clean/Purge. The GitHub release is pending account reinstatement; until then
+> use the files in `releases\v1.5.4\` or the live update host. The v1.5.2 release
+> stays in `releases\v1.5.2\` for existing installs, and its update hotfix is
+> next to it.
+
 | What | Link |
 |------|------|
-| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.2.exe` (2.14 MB) | [direct download](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.5.2/UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.2.exe) |
-| Portable `.zip` (no install) and full source | [releases page](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest) |
+| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.4.exe` (2.41 MB) | [GitHub release (pending)](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/tag/v1.5.4) · local: `releases\v1.5.4\` · live: <https://adskdoctor.unlockdigital.online/#download> |
+| Portable `.zip` (no install) and full source | [releases page](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest) · local: `releases\v1.5.4\` |
 | Always the newest release | <https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest> |
 
-SHA256 of the files above (also in `SHA256SUMS.txt` on the release page):
+SHA256 of the local v1.5.4 files (also in `releases\v1.5.4\SHA256SUMS.txt`):
 
 ```text
-B306ACAFDCE6F5A70B07C690332ED1B2B21D9DAC091BE513E22CA4AA0B5B8E43  UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.2.exe
-159BEECB847E2ADDEAC33EA7AA30E0AC4EE317688A1618E008F4621BCDB5B52E  AdskDoctor-v1.5.2-Portable.zip
-CB1FFBB705911CB972E17C1BA8C45EDDBEB7046D69060DB5C3F36B5401947137  AdskDoctor-v1.5.2-Project.zip
+C14588837B691D63EAD173E8B79974DF3F23851DBC087B2142CE4DCF561A20B0  AdskDoctor-v1.5.4-Project.zip
+475544A970DBB3CC438E06B97B2D96C6F084EEDE032BB8553940F2D9BDF21768  AdskDoctor-v1.5.4-Portable.zip
+5B56631D99D2C7ECF8557576866768D7ED9315C571E910F5B2004CA9EEF0EF73  UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.4.exe
 ```
 
 See [Verify your download](#verify-your-download).
 
-The installer adds a desktop shortcut and an uninstaller, and is branded with the
-UNLOCK DIGITAL logo. See [Quick start](#quick-start) below.
+The installer adds a desktop shortcut and an uninstaller, and carries the
+Fix Shield product mark. See [Quick start](#quick-start) below.
 
 ---
 
@@ -77,7 +84,7 @@ applicable laws in your jurisdiction.
 | **1** | Deep read-only diagnostic (~19 checks) | no |
 | **2** | Layered backup + generated `UNDO.ps1` | writes backup only |
 | **3** | Safe cleanup of leftovers from non-genuine patches | **preview by default** — needs `-Apply` |
-| **4** | Repair / reinstall official licensing components (ADLS, AdSSO) | **preview by default** — needs `-Apply` |
+| **4** | Repair / reinstall official licensing components (ADLS, AdSSO, Identity Manager) and clear stale AutoCAD 2027 NLM pointers | **preview by default** — needs `-Apply` |
 | **5** | Full removal — every Autodesk trace (products, licensing, registry, crack roots) off the machine | **preview by default** — needs `-Apply` |
 
 **Safety model:** backup always runs first, cleanup/repair/removal do
@@ -94,6 +101,7 @@ fresh afterwards.
 |------------------------|-------------------------------|
 | **"Licensing error — An error occurred"** (AutoCAD/Revit 2020+) | Verifies the whole sign-in licensing stack (ADLS build, service state, licensing agent, identity/SSO component), flags a stale or half-updated licensing service, resets leftover licence caches and reinstalls the official components in the Repair phase. |
 | **"License Startup Error — There is a problem with the software license"** (3ds Max 2023) | A stale `AdskLicensing\Current` junction (an older build still active), a missing `AdSSO` component on a 2020–2023 product, or an unfinished licensing update all produce this generic error. Repair re-points `Current` at the newest genuine build, installs AdSSO for legacy products, repairs Identity Manager and clears the sign-in caches. |
+| **"The Network License Manager version you use does not meet the minimum requirements"** (AutoCAD 2027 setup) | Stale local NLM pointers (`nlm-server-info.json`, `licpath.lic`, old NLM registry keys and `ADSKFLEX_LICENSE_FILE` / `ADSK_LICENSE_FILE` / `LICPATH` / `ACADSERVER`) make the installer think an old server is configured. Scan reports them; Repair copies them to a dedicated backup with a runnable `UNDO.ps1`, clears them, restarts the licensing service and asks for a reboot before setup is retried. It never removes the NLM service. If this PC is the license server, update NLM to **11.19.9.0+** instead. |
 | **"Connection Lost to Autodesk Desktop Licensing Service"** | ADLS presence, state, start-up mode and the signature of its service binary; an old or replaced build is reported and the Repair phase installs the official one. |
 | **Sign-in window never opens / sign-in fails** | AdSSO + identity component, **the Edge WebView2 runtime that renders the sign-in window**, `hosts` hijacks, firewall blocks, WinHTTP proxy, DNS and connectivity to `accounts.autodesk.com`. The product fails with a licensing error *before* the sign-in page when WebView2 is missing. |
 | **Ask for a serial number / activation screen** | Legacy ADLM licence cache (`ProductInformation.pit`, `ProgramData\FLEXnet`) left by a non-genuine activation — the Cleanup phase resets it so the product asks for a normal sign-in again. |
@@ -117,29 +125,80 @@ report with hundreds of findings still reads as a short list of things to do.
    [Releases](../../releases) page.
 2. Run it and accept the UAC prompt — it installs to
    `%ProgramFiles%\UNLOCK DIGITAL\AdskDoctor` and creates Desktop / Start Menu
-   shortcuts, all branded with the **UNLOCK DIGITAL** logo.
-3. Launch **Autodesk Licensing Doctor** from the shortcut.
+   shortcuts with the **Fix Shield** icon.
+3. Launch **Autodesk Licensing Doctor** from the shortcut. The shortcut starts
+   the GUI through the Microsoft-signed PowerShell host, so it also works when
+   Windows 11 **Smart App Control** is enabled.
 4. Uninstall any time from **Settings → Apps** (or the Start Menu).
 
 ### Portable
 
 1. Download `AdskDoctor-v<version>-Portable.zip` from Releases and extract it.
-2. Run **`UNLOCK-DIGITAL-AdskDoctor.exe`** (accept the UAC prompt) → bilingual GUI opens.
+2. Double-click **`Run-GUI.vbs`** (accept the UAC prompt) → bilingual GUI opens.
+   Use `Run-GUI.cmd` only as a fallback if `.vbs` files are blocked; the
+   compiled `UNLOCK-DIGITAL-AdskDoctor.exe` is included for machines where
+   unsigned EXEs are allowed (or for a future SignPath-signed release).
 3. Keep all files in the same folder — the app calls the `.ps1` scripts sitting
-   next to the `.exe`.
+   next to the launcher.
+
+> **Windows 11 Smart App Control / error 4551?** It can block the unsigned
+> installer file itself, but not the GUI code. After installation, both Setup
+> and Portable launch through the Microsoft-signed PowerShell host, so both
+> work on Windows 11. If the installer file is blocked, use `Run-GUI.vbs` from
+> the Portable ZIP; do not disable Smart App Control just to run an unsigned
+> build.
+>
+> **"The term `powershell` is not recognized" on Windows 10?** Fixed in this
+> build. The GUI used to find PowerShell through `PATH`; on machines with a
+> stripped PATH, Scan failed with this error. It now uses the running host's
+> `$PSHOME` and an absolute `System32` fallback.
 
 Two extra buttons in the top bar, next to the language toggle:
 
 * **Remove Autodesk completely** — Phase 5: takes every Autodesk trace off the
   machine. It asks for confirmation twice and runs a backup first.
-* **Update** — checks GitHub for a newer official release (the only moment
-  the tool talks to GitHub, and only when you press it). Already on the latest
-  version? It simply tells you so. Otherwise it downloads the release archive,
-  verifies its SHA256 against the published `SHA256SUMS.txt`, copies the files
-  over the running copy and reopens the app — no manual reinstall. It works the
-  same for the Portable, the Project and the installed versions: the compiled
-  launcher `.exe` ships in all three downloads, so the update brings a fresh
-  launcher too.
+* **Update** — checks the configured source for a newer official release (the
+  only moment the tool talks to the network, and only when you press it).
+  Without configuration it uses the GitHub `releases/latest` feed; if that
+  account is unavailable, it can read a small `update.json` from any HTTPS host
+  or a local/UNC folder. Already on the latest version? It simply tells you so.
+  Otherwise it downloads the release archive, verifies its SHA256, copies the
+  files over the running copy and reopens the app — no manual reinstall. It
+  works the same for the Portable, the Project and the installed versions: the
+  compiled launcher `.exe` ships in all three downloads, so the update brings a
+  fresh launcher too.
+
+### Update source (self-hosted / offline)
+
+The updater reads `update-config.json` from the app folder (or
+`%ProgramData%\UNLOCK DIGITAL\update-config.json`). Copy
+`update-config.example.json` to `update-config.json` and choose one:
+
+```json
+{ "manifestUrl": "https://your-host.example/adskdoctor/update.json" }
+```
+
+or a local / network folder:
+
+```json
+{ "manifestPath": "\\\\server\\share\\adskdoctor\\update.json" }
+```
+
+`update.json` is generated in every release folder and uses relative paths, so
+uploading (or copying) the whole `releases\v<version>\` folder is enough:
+
+```json
+{
+  "version": "1.5.4",
+  "portableUrl": "AdskDoctor-v1.5.4-Portable.zip",
+  "sha256": "475544A970DBB3CC438E06B97B2D96C6F084EEDE032BB8553940F2D9BDF21768",
+  "sha256Url": "SHA256SUMS.txt"
+}
+```
+
+The archive is always checked against the SHA256 before it is extracted. If no
+manifest is configured and GitHub is unavailable, the button reports a clear
+"update source unavailable" message instead of a raw 404.
 
 In the left panel, **License mode** fills itself with the products the licensing
 service has registered: pick a product, pick the license type (**single-user
@@ -184,6 +243,11 @@ powershell -ExecutionPolicy Bypass -File .\Clean.ps1 -Apply
 powershell -ExecutionPolicy Bypass -File .\Repair.ps1
 powershell -ExecutionPolicy Bypass -File .\Repair.ps1 -Apply
 
+# Targeted AutoCAD 2027 NLM setup blocker (preview first; Repair runs this too)
+powershell -ExecutionPolicy Bypass -File .\NlmFix.ps1
+powershell -ExecutionPolicy Bypass -File .\NlmFix.ps1 -Apply
+powershell -ExecutionPolicy Bypass -File .\Repair.ps1 -Apply -SkipNlmFix
+
 # Phase 4 — check what is missing without touching anything
 powershell -ExecutionPolicy Bypass -File .\Repair.ps1 -CheckOnly
 
@@ -203,8 +267,13 @@ powershell -ExecutionPolicy Bypass -File .\Repair.ps1 -Apply `
 powershell -ExecutionPolicy Bypass -File .\Purge.ps1
 powershell -ExecutionPolicy Bypass -File .\Purge.ps1 -Apply
 
-# Update tool — is there a newer release? (checks GitHub, downloads nothing)
+# Update tool — is there a newer release? (reads update-config.json; falls back
+# to GitHub; downloads nothing)
 powershell -ExecutionPolicy Bypass -File .\Update.ps1 -Check
+
+# one-off source override (HTTPS manifest or a local/UNC update.json)
+powershell -ExecutionPolicy Bypass -File .\Update.ps1 -Check -ManifestPath '\\server\share\adskdoctor\update.json'
+powershell -ExecutionPolicy Bypass -File .\Update.ps1 -Check -ManifestUrl 'https://your-host.example/adskdoctor/update.json'
 
 # Update tool — fetch + SHA256-verify + stage the latest official release; the
 # GUI Update button performs the in-place swap (the scripts refuse to run a
@@ -378,9 +447,11 @@ certificate), sign the built binaries yourself:
 | `Backup.ps1` | Phase 2 — layered backup + `UNDO.ps1` generator |
 | `Clean.ps1` | Phase 3 — cleanup (preview by default) |
 | `Purge.ps1` | Phase 5 — full removal (preview by default, backup first) |
-| `Repair.ps1` | Phase 4 — repair / reinstall official components |
+| `Repair.ps1` | Phase 4 — repair / reinstall official components + clear stale AutoCAD 2027 NLM pointers (backup first) |
+| `NlmFix.ps1` | focused AutoCAD 2027 NLM installer-blocker check/cleanup; preview by default, `-Apply` backs up to `backups\nlmfix_*` with `UNDO.ps1` |
+| `NlmCommon.ps1` | shared read-only NLM detection and backup/cleanup functions used by the diagnostic and Repair |
 | `LicenseMode.ps1` | License mode — lists registered products, previews/switches the license type (USER / NETWORK / STANDALONE / RESET) via the official licensing helper |
-| `Update.ps1` | Self-update — checks GitHub for the latest official release; with `-Download` (or the GUI Update button) it fetches the archive, verifies SHA256 and stages the in-place swap |
+| `Update.ps1` | Self-update — reads an `update.json` manifest (HTTPS or local/UNC) or the GitHub latest release; with `-Download` (or the GUI Update button) it fetches the archive, verifies SHA256 and stages the in-place swap |
 | `Build-Release.ps1` | release builder (Project/Portable zips + Setup.exe + record) |
 | `installer/` | `AdskDoctor.iss` (Inno Setup) + `Install.cmd` / `Install.ps1` / `Uninstall.*` |
 | `make-icon.ps1` | generates `AdskDoctor.ico` (app icon) |
@@ -432,6 +503,16 @@ still required — the product must be able to sign in normally afterwards.
 Cleanup and Repair are **preview-only** until you pass `-Apply`, the backup runs
 first, and `UNDO.ps1` reverses every change. Run the diagnostic first; on a clean
 machine the report is short and nothing needs cleaning.
+
+**AutoCAD 2027 setup says the Network License Manager version is too old. Does this fix it?**
+When the blocker is stale local NLM state, yes. The scan reports
+`nlm-server-info.json`, `licpath.lic`, old NLM registry keys and the
+`ADSKFLEX_LICENSE_FILE` / `ADSK_LICENSE_FILE` / `LICPATH` / `ACADSERVER`
+variables. Repair copies them to a dedicated `backups\nlmfix_*` folder with
+`UNDO.ps1`, clears them, restarts the licensing service and asks you to reboot
+before retrying setup. It does **not** remove the NLM service and it does not
+update a license server: if this PC is the server, install NLM **11.19.9.0+**
+from Autodesk. `NlmFix.ps1` exposes the same check/cleanup on its own.
 
 **Why does the report say FAIL on a machine that looks fine?**
 Read the "Problems by area" block: a `FAIL` means a check that blocks official

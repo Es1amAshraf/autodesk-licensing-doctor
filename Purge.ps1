@@ -38,6 +38,25 @@ param(
 $ErrorActionPreference = 'Continue'
 $ProgressPreference    = 'SilentlyContinue'
 
+# Never resolve the backup host through PATH. A stripped Windows PATH was the
+# cause of the Windows 10 "powershell is not recognized" scan failure; the same
+# trap must not break the mandatory backup before Purge.
+function Get-PowerShellExe {
+    $candidates = @()
+    try { if ($PSHOME) { $candidates += (Join-Path $PSHOME 'powershell.exe') } } catch {}
+    try {
+        if ($env:SystemRoot) {
+            $candidates += (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe')
+        }
+    } catch {}
+    foreach ($c in $candidates) {
+        if ($c -and (Test-Path -LiteralPath $c)) { return $c }
+    }
+    $cmd = Get-Command powershell.exe -ErrorAction SilentlyContinue
+    if ($cmd -and $cmd.Source) { return $cmd.Source }
+    return 'powershell.exe'
+}
+
 $script:Changes   = 0
 $script:Errors    = 0
 $script:BackupDir = $null
@@ -145,7 +164,7 @@ if ($Apply -and -not $SkipBackup) {
     }
     $bargs = @('-ExecutionPolicy','Bypass','-File',$backupScript)
     if ($BackupRoot) { $bargs += @('-BackupRoot', $BackupRoot) }
-    & powershell -NoProfile @bargs
+    & (Get-PowerShellExe) -NoProfile @bargs
     if ($LASTEXITCODE -ne 0) {
         Write-Host '   ERROR: backup failed. Aborting purge.' -ForegroundColor Red
         exit 1

@@ -79,6 +79,11 @@ function Add-Finding {
 
 function Write-Section { param([string]$Title) Write-Host ''; Write-Host ("== {0} ==" -f $Title) -ForegroundColor Cyan }
 
+# Shared NLM installer-blocker logic. NlmCommon.ps1 ships beside this script;
+# the diagnostic only calls its read-only detection functions.
+$nlmCommon = Join-Path $PSScriptRoot 'NlmCommon.ps1'
+if (Test-Path -LiteralPath $nlmCommon) { . $nlmCommon }
+
 # ===========================================================================
 # Helpers
 # ===========================================================================
@@ -966,7 +971,31 @@ if (Test-Path -LiteralPath $shared) {
 if ($nlmFound -eq 0 -and $flex.Count -eq 0) {
     Add-Finding OK 'NLM' 'No Network License Manager installation found'
 } else {
-    Add-Finding INFO 'NLM' 'Revit/AutoCAD 2026+ require a recent NLM; an old one blocks installation' 'Remove or update it before installing 2026 products'
+    Add-Finding INFO 'NLM' 'AutoCAD 2027 requires NLM 11.19.9.0+; an older one blocks installation' 'Repair clears stale local pointers first, or update the license server'
+}
+
+# AutoCAD 2027 setup reads local NLM pointers and refuses to run when it
+# believes an old server is configured. These are the exact leftovers the
+# customer BAT removed; report them read-only here so Repair can clear them.
+if (Get-Command Get-NlmInstallBlockers -ErrorAction SilentlyContinue) {
+    try {
+        $nlmBlock = Get-NlmInstallBlockers
+        foreach ($f in @($nlmBlock.Files)) {
+            Add-Finding WARN 'NLM' ("AutoCAD 2027 installer blocker: stale {0}" -f $f.Name) $f.Path
+        }
+        foreach ($r in @($nlmBlock.Registry)) {
+            Add-Finding WARN 'NLM' 'AutoCAD 2027 installer blocker: stale NLM registry key' $r.RegPath
+        }
+        foreach ($e in @($nlmBlock.Environment)) {
+            Add-Finding WARN 'NLM' ("AutoCAD 2027 installer blocker: {0} ({1})" -f $e.Name, $e.Scope) $e.Value
+        }
+        foreach ($n in @($nlmBlock.OldNlm)) {
+            Add-Finding WARN 'NLM' ("NLM {0} is older than 11.19.9.0 (AutoCAD 2027 minimum)" -f $n.VersionText) $n.Path
+        }
+        if ($nlmBlock.Count -gt 0) {
+            Add-Finding INFO 'NLM' ("{0} stale NLM pointer(s) can block AutoCAD 2027 setup" -f $nlmBlock.Count) 'Repair backs them up and clears them before reinstalling the licensing components'
+        }
+    } catch { }
 }
 
 # ===========================================================================

@@ -1,0 +1,33 @@
+{
+  "name": "UNLOCK DIGITAL — Autodesk Licensing Doctor",
+  "short_name": "AdskDoctor",
+  "description": "Diagnose, clean and repair Autodesk licensing on Windows. Backup first, official components only, Undo included.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#080b12",
+  "theme_color": "#080b12",
+  "categories": ["utilities", "business"],
+  "icons": [
+    {
+      "src": "/assets/adskdoctor-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/adskdoctor-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ]
+}
