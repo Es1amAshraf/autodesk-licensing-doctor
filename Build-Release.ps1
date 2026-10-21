@@ -312,7 +312,9 @@ Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
 # ---------------------------------------------------------------------------
 $hashLines = @()
 foreach ($a in $artifacts) { $hashLines += ("{0}  {1}" -f (Get-Sha256 $a), (Split-Path $a -Leaf)) }
-Save-Text (Join-Path $releaseDir 'SHA256SUMS.txt') (($hashLines -join "`r`n") + "`r`n")
+# Hex checksums are ASCII. Write without a BOM so the file starts with the
+# first hash, not an invisible character that breaks naive parsers.
+Save-Json (Join-Path $releaseDir 'SHA256SUMS.txt') (($hashLines -join "`r`n") + "`r`n")
 
 # Machine-readable manifest for Update.ps1. The URLs are relative on purpose:
 # upload (or copy) this whole release folder to any HTTPS host / share and the
