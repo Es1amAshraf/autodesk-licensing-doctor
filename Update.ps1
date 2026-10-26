@@ -17,8 +17,8 @@
 
          The manifest is a small JSON file:
 
-             { "version":      "1.5.4",
-               "portableUrl":  "AdskDoctor-v1.5.4-Portable.zip",
+             { "version":      "1.5.5",
+               "portableUrl":  "AdskDoctor-v1.5.5-Portable.zip",
                "sha256":       "....",
                "downloadPage": "https://example.com/adskdoctor/" }
 

@@ -1073,7 +1073,7 @@ foreach ($n in 'BtnDiag','BtnBackup','BtnClean','BtnRepair','BtnUndo','BtnPurge'
 # The version comes from the compiled exe, so a support request can name it.
 # Running the .ps1 directly (development) has no version to report, so keep
 # the release version instead of showing powershell.exe's Windows build.
-$script:appVersion = '1.5.4'
+$script:appVersion = '1.5.5'
 try {
     $proc = [System.Diagnostics.Process]::GetCurrentProcess()
     if ($proc.ProcessName -notin @('powershell', 'pwsh')) {

@@ -1,5 +1,13 @@
 ﻿# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases
 
+## v1.5.5  (2026-10-26 16:56:35)
+
+Fix: the license-mode product picker now shows the product name instead of a raw PowerShell object. Scan, backup, clean and repair behaviour is unchanged.
+
+- `AdskDoctor-v1.5.5-Project.zip`  -  0.47 MB  -  SHA256 `C8E92CA60AC024C28B3F6D14725FC57450759138D8DAEFEA0BED5D593541B0A3`
+- `AdskDoctor-v1.5.5-Portable.zip`  -  0.44 MB  -  SHA256 `EB45A0C16E496A9DC3D15B99B7AE0651B1F9B7AD292829007B4A8099C49A7A20`
+- `UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.5.exe`  -  2.41 MB  -  SHA256 `29B65D6D63A9175D5E2BAE72E86C8639D7B4D0D4FF5DCB77936199AFD0A9B2FF`
+
 ## v1.5.4  (2026-10-21 14:52:12)
 
 Maintenance release: fixes Clean/Purge on machines with a stripped Windows PATH, hardens the Run-GUI.cmd elevation check, forces administrator launch for every entry point, and keeps the AutoCAD 2027 NLM fix. Also refreshes the Windows 10/11 Smart App Control guidance.

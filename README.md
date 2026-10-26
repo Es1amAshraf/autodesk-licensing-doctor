@@ -21,25 +21,25 @@ Windows 10 / 11 · GUI in **Arabic + English** · no installation required.
 
 ## Download
 
-> **Status (21 Oct 2026):** v1.5.4 is built locally and now includes the
-> AutoCAD 2027 NLM installer-blocker fix plus the stripped-PATH fixes for
-> Clean/Purge. The GitHub release is pending account reinstatement; until then
-> use the files in `releases\v1.5.4\` or the live update host. The v1.5.2 release
-> stays in `releases\v1.5.2\` for existing installs, and its update hotfix is
-> next to it.
+> **Status (26 Oct 2026):** v1.5.5 is built locally and fixes the License mode
+> product picker, which used to show a raw PowerShell object instead of the
+> product name. It keeps the AutoCAD 2027 NLM installer-blocker fix and the
+> stripped-PATH fixes for Clean/Purge. The GitHub release is pending account
+> reinstatement; until then use the files in `releases\v1.5.5\` or the live
+> update host. Older releases stay in `releases\` for existing installs.
 
 | What | Link |
 |------|------|
-| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.4.exe` (2.41 MB) | [GitHub release (pending)](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/tag/v1.5.4) · local: `releases\v1.5.4\` · live: <https://adskdoctor.unlockdigital.online/#download> |
-| Portable `.zip` (no install) and full source | [releases page](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest) · local: `releases\v1.5.4\` |
+| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.5.exe` (2.41 MB) | [GitHub release (pending)](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/tag/v1.5.5) · local: `releases\v1.5.5\` · live: <https://adskdoctor.unlockdigital.online/#download> |
+| Portable `.zip` (no install) and full source | [releases page](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest) · local: `releases\v1.5.5\` |
 | Always the newest release | <https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest> |
 
-SHA256 of the local v1.5.4 files (also in `releases\v1.5.4\SHA256SUMS.txt`):
+SHA256 of the local v1.5.5 files (also in `releases\v1.5.5\SHA256SUMS.txt`):
 
 ```text
-C14588837B691D63EAD173E8B79974DF3F23851DBC087B2142CE4DCF561A20B0  AdskDoctor-v1.5.4-Project.zip
-475544A970DBB3CC438E06B97B2D96C6F084EEDE032BB8553940F2D9BDF21768  AdskDoctor-v1.5.4-Portable.zip
-5B56631D99D2C7ECF8557576866768D7ED9315C571E910F5B2004CA9EEF0EF73  UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.4.exe
+C8E92CA60AC024C28B3F6D14725FC57450759138D8DAEFEA0BED5D593541B0A3  AdskDoctor-v1.5.5-Project.zip
+EB45A0C16E496A9DC3D15B99B7AE0651B1F9B7AD292829007B4A8099C49A7A20  AdskDoctor-v1.5.5-Portable.zip
+29B65D6D63A9175D5E2BAE72E86C8639D7B4D0D4FF5DCB77936199AFD0A9B2FF  UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.5.exe
 ```
 
 See [Verify your download](#verify-your-download).
@@ -189,9 +189,9 @@ uploading (or copying) the whole `releases\v<version>\` folder is enough:
 
 ```json
 {
-  "version": "1.5.4",
-  "portableUrl": "AdskDoctor-v1.5.4-Portable.zip",
-  "sha256": "475544A970DBB3CC438E06B97B2D96C6F084EEDE032BB8553940F2D9BDF21768",
+  "version": "1.5.5",
+  "portableUrl": "AdskDoctor-v1.5.5-Portable.zip",
+  "sha256": "EB45A0C16E496A9DC3D15B99B7AE0651B1F9B7AD292829007B4A8099C49A7A20",
   "sha256Url": "SHA256SUMS.txt"
 }
 ```
