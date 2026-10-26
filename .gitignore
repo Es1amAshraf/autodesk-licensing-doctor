@@ -9,6 +9,9 @@ website/downloads/
 UNLOCK-DIGITAL-AdskDoctor.exe
 _test-noUAC.exe
 
+# ---- Icon preview artifact ------------------------------------------------
+icon-preview.png
+
 # ---- Runtime artifacts produced by the tool ------------------------------
 report.html
 report.json
