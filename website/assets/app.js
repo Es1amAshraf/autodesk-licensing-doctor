@@ -17,11 +17,11 @@
     if (!shotImage) { return; }
     var isArabic = lang === "ar";
     shotImage.src = assetPrefix + (isArabic ? "assets/screenshot-ar-20261021.png" : "assets/screenshot-en-20261021.png");
-    shotImage.alt = isArabic ? "ÙˆØ§Ø¬Ù‡Ø© UNLOCK DIGITAL Ø¨Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©" : "UNLOCK DIGITAL English interface";
+    shotImage.alt = isArabic ? "واجهة UNLOCK DIGITAL بالعربية" : "UNLOCK DIGITAL English interface";
     if (shotTitle) {
       shotTitle.textContent = isArabic
-        ? "UNLOCK DIGITAL â€” Ø¯ÙƒØªÙˆØ± ØªØ±Ø®ÙŠØµ Ø£ÙˆØªÙˆØ¯ÙŠØ³Ùƒ"
-        : "UNLOCK DIGITAL â€” Autodesk Licensing Doctor";
+        ? "UNLOCK DIGITAL — دكتور ترخيص أوتوديسك"
+        : "UNLOCK DIGITAL — Autodesk Licensing Doctor";
     }
     shotTabs.forEach(function (tab) {
       var active = tab.getAttribute("data-shot") === lang;
@@ -37,8 +37,8 @@
     }
     if (heroWindowTitle) {
       heroWindowTitle.textContent = isArabic
-        ? "UNLOCK DIGITAL â€” Ø¯ÙƒØªÙˆØ± ØªØ±Ø®ÙŠØµ Ø£ÙˆØªÙˆØ¯ÙŠØ³Ùƒ"
-        : "UNLOCK DIGITAL â€” Autodesk Licensing Doctor";
+        ? "UNLOCK DIGITAL — دكتور ترخيص أوتوديسك"
+        : "UNLOCK DIGITAL — Autodesk Licensing Doctor";
     }
   }
 
@@ -58,7 +58,7 @@
     });
 
     if (langToggle) {
-      langToggle.textContent = currentLang === "ar" ? "English" : "Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©";
+      langToggle.textContent = currentLang === "ar" ? "English" : "العربية";
       langToggle.setAttribute("hreflang", currentLang === "ar" ? "en" : "ar");
       if (window.location.protocol !== "file:") {
         langToggle.setAttribute("href", currentLang === "ar" ? "/" : "/ar/");
@@ -68,8 +68,8 @@
     setShot(currentLang);
     setHero(currentLang);
     document.title = currentLang === "ar"
-      ? "UNLOCK DIGITAL â€” Ø¯ÙƒØªÙˆØ± ØªØ±Ø®ÙŠØµ Ø£ÙˆØªÙˆØ¯ÙŠØ³Ùƒ"
-      : "UNLOCK DIGITAL â€” Autodesk Licensing Doctor";
+      ? "UNLOCK DIGITAL — دكتور ترخيص أوتوديسك"
+      : "UNLOCK DIGITAL — Autodesk Licensing Doctor";
   }
 
   if (langToggle) {
@@ -100,7 +100,7 @@
       var text = code.textContent.trim();
       var done = function () {
         var old = code.textContent;
-        code.textContent = currentLang === "ar" ? "ØªÙ… Ø§Ù„Ù†Ø³Ø® âœ“" : "Copied âœ“";
+        code.textContent = currentLang === "ar" ? "تم النسخ ✓" : "Copied ✓";
         window.setTimeout(function () { code.textContent = old; }, 1200);
       };
       if (navigator.clipboard && navigator.clipboard.writeText) {
