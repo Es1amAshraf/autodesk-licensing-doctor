@@ -873,7 +873,17 @@ function T { param([string]$k) $L[$script:lang][$k] }
                       Padding="10" Visibility="Collapsed">
                 <StackPanel>
                   <TextBlock x:Name="LicProductFieldLabel" Text="Product" Style="{StaticResource FieldLabel}"/>
-                  <ComboBox x:Name="LicProductCombo" Style="{StaticResource DarkComboBox}" DisplayMemberPath="Display"/>
+                  <!-- An explicit ItemTemplate is required: with this custom
+                       ComboBox ControlTemplate, DisplayMemberPath leaves
+                       SelectionBoxItemTemplate empty and WPF falls back to
+                       rendering the raw object (@{Product=; Display=...}). -->
+                  <ComboBox x:Name="LicProductCombo" Style="{StaticResource DarkComboBox}">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate>
+                        <TextBlock Text="{Binding Display}"/>
+                      </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
                   <TextBlock x:Name="LicModeFieldLabel" Text="Mode" Style="{StaticResource FieldLabel}"/>
                   <ComboBox x:Name="LicModeCombo" Style="{StaticResource DarkComboBox}"/>
                   <TextBox x:Name="LicServersBox" Style="{StaticResource DarkTextBox}" Margin="0,6,0,4"

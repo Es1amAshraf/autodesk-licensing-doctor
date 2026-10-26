@@ -209,6 +209,14 @@ Describe 'Regression guards' {
         $gui | Should -Match "\[string\]\`$Lang\s*=\s*'en'"
     }
 
+    It 'the product picker uses an ItemTemplate, not DisplayMemberPath (the custom combo template ignores it)' {
+        # DisplayMemberPath left SelectionBoxItemTemplate null with the custom
+        # ControlTemplate, so the combo showed "@{Product=; Display=...}".
+        $gui = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor-GUI.ps1') -Raw
+        $gui | Should -Not -Match 'LicProductCombo[^>]*DisplayMemberPath'
+        $gui | Should -Match 'LicProductCombo[\s\S]{0,600}?<TextBlock Text="\{Binding Display\}"'
+    }
+
     It 'the release workflow installs ps2exe for Windows PowerShell 5.1 (the build used to fail)' {
         $wf = Get-Content -LiteralPath (Join-Path $script:Root '.github\workflows\release-sign.yml') -Raw
         $wf | Should -Match 'Install-Module ps2exe -Scope CurrentUser -Force'
