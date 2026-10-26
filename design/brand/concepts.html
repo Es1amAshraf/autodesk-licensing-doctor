@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AdskDoctor logo concepts</title>
+<style>
+  :root{
+    --bg:#070b12; --panel:#0d1421; --line:#223049;
+    --text:#eaf0f8; --muted:#8d9bb0; --red:#e41e2e; --green:#37d39b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI",Arial,sans-serif}
+  body{padding:38px 46px 44px}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:28px}
+  h1{font-size:25px;margin:0 0 5px;letter-spacing:.2px}
+  .sub{color:var(--muted);font-size:13px}
+  .tag{font-size:11px;font-weight:700;letter-spacing:.13em;color:var(--red);text-transform:uppercase}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .card{background:linear-gradient(180deg,#0f1725,#0a0f19);border:1px solid var(--line);border-radius:18px;padding:18px 18px 16px;position:relative;overflow:hidden}
+  .card:before{content:"";position:absolute;inset:0 0 auto 0;height:1px;background:linear-gradient(90deg,transparent,#30415f,transparent)}
+  .name{font-size:17px;font-weight:700;margin:0 0 2px}
+  .desc{font-size:12px;color:var(--muted);min-height:32px;margin-bottom:14px}
+  .hero{display:flex;align-items:center;justify-content:center;height:238px;border-radius:13px;background:
+    radial-gradient(360px 190px at 50% 28%,rgba(228,30,46,.10),transparent 70%),
+    linear-gradient(145deg,#0b1220,#060a11);border:1px solid #182338}
+  .hero svg{width:220px;height:220px;filter:drop-shadow(0 18px 26px rgba(0,0,0,.45))}
+  .sizes{display:flex;align-items:center;gap:18px;margin-top:14px;height:48px;color:var(--muted);font-size:10px}
+  .size{display:flex;align-items:center;gap:7px}
+  .size svg{display:block}
+  .best{margin-top:14px;font-size:11px;color:#9fb0c7;border-top:1px solid #182338;padding-top:11px}
+  .best b{color:#d8e3f2;font-weight:600}
+  .mock{margin-top:22px;background:linear-gradient(180deg,#0f1623,#0a0f18);border:1px solid var(--line);border-radius:18px;padding:20px 22px;display:flex;align-items:center;gap:18px}
+  .mock .tile{width:58px;height:58px;flex:0 0 auto;border-radius:13px;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#131d2e,#0a0f19);border:1px solid #253450;box-shadow:0 8px 24px rgba(0,0,0,.35);overflow:hidden}
+  .mock .tile svg{width:54px;height:54px}
+  .mock .word{font-size:10px;font-weight:700;letter-spacing:.14em;color:#93a2b8;margin-bottom:3px}
+  .mock .title{font-size:22px;font-weight:700;letter-spacing:.1px}
+  .mock .hint{margin-left:auto;font-size:12px;color:var(--muted);text-align:right;line-height:1.5}
+  .footer{display:flex;justify-content:space-between;color:#5d6a7e;font-size:11px;margin-top:18px}
+</style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute;left:-9999px" aria-hidden="true">
+    <defs>
+      <linearGradient id="tileBg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#1c2941"/><stop offset=".55" stop-color="#111a2a"/><stop offset="1" stop-color="#070b12"/>
+      </linearGradient>
+      <linearGradient id="red" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ff4a5c"/><stop offset=".52" stop-color="#e41e2e"/><stop offset="1" stop-color="#b70d21"/>
+      </linearGradient>
+      <linearGradient id="white" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#dbe4f0"/>
+      </linearGradient>
+      <linearGradient id="shieldFill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#182338"/><stop offset="1" stop-color="#0a101b"/>
+      </linearGradient>
+      <filter id="markShadow" x="-30%" y="-30%" width="160%" height="170%">
+        <feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#000" flood-opacity=".5"/>
+      </filter>
+    </defs>
+
+    <symbol id="mark1" viewBox="0 0 512 512">
+      <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#tileBg)"/>
+      <rect x="17" y="17" width="478" height="478" rx="111" fill="none" stroke="#2b3b57" stroke-width="2"/>
+      <ellipse cx="256" cy="72" rx="176" ry="84" fill="#e41e2e" opacity=".10"/>
+      <g filter="url(#markShadow)">
+        <path d="M168 250 V212 C168 163.4 207.4 124 256 124 C304.6 124 344 163.4 344 212 V250"
+              fill="none" stroke="url(#red)" stroke-width="44" stroke-linecap="round"/>
+        <rect x="126" y="238" width="260" height="198" rx="50" fill="url(#white)" stroke="#ffffff" stroke-width="3"/>
+        <rect x="233" y="274" width="46" height="126" rx="14" fill="url(#red)"/>
+        <rect x="193" y="314" width="126" height="46" rx="14" fill="url(#red)"/>
+        <rect x="150" y="262" width="212" height="20" rx="10" fill="#ffffff" opacity=".55"/>
+      </g>
+    </symbol>
+
+    <symbol id="mark2" viewBox="0 0 512 512">
+      <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#tileBg)"/>
+      <rect x="17" y="17" width="478" height="478" rx="111" fill="none" stroke="#2b3b57" stroke-width="2"/>
+      <ellipse cx="256" cy="72" rx="176" ry="84" fill="#e41e2e" opacity=".10"/>
+      <g filter="url(#markShadow)">
+        <rect x="234" y="238" width="44" height="196" rx="22" fill="url(#red)"/>
+        <rect x="268" y="338" width="88" height="40" rx="15" fill="url(#red)"/>
+        <rect x="268" y="394" width="60" height="40" rx="15" fill="url(#red)"/>
+        <rect x="126" y="148" width="260" height="66" rx="31" fill="url(#red)"/>
+        <rect x="223" y="46" width="66" height="266" rx="31" fill="url(#red)"/>
+        <circle cx="256" cy="181" r="21" fill="#0a0f19"/>
+        <rect x="245" y="181" width="22" height="52" rx="11" fill="#0a0f19"/>
+      </g>
+    </symbol>
+
+    <symbol id="mark3" viewBox="0 0 512 512">
+      <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#tileBg)"/>
+      <rect x="17" y="17" width="478" height="478" rx="111" fill="none" stroke="#2b3b57" stroke-width="2"/>
+      <ellipse cx="256" cy="72" rx="176" ry="84" fill="#e41e2e" opacity=".10"/>
+      <g filter="url(#markShadow)">
+        <path d="M256 62 L408 116 V244 C408 332 346 398 256 446 C166 398 104 332 104 244 V116 Z"
+              fill="url(#shieldFill)" stroke="url(#red)" stroke-width="26" stroke-linejoin="round"/>
+        <path d="M256 88 L386 134 V244 C386 318 334 374 256 416 C178 374 126 318 126 244 V134 Z"
+              fill="none" stroke="#32435f" stroke-width="3"/>
+        <rect x="232" y="148" width="48" height="182" rx="16" fill="#f5f8fd"/>
+        <rect x="165" y="215" width="182" height="48" rx="16" fill="#f5f8fd"/>
+        <circle cx="256" cy="239" r="24" fill="#0a0f19"/>
+        <rect x="244" y="239" width="24" height="54" rx="12" fill="#0a0f19"/>
+      </g>
+    </symbol>
+  </svg>
+
+  <div class="top">
+    <div>
+      <div class="tag">AdskDoctor &nbsp;·&nbsp; brand direction</div>
+      <h1>Three marks for a licensing doctor</h1>
+      <div class="sub">Medical clarity + the confidence of a tool that repairs and unlocks. Built to stay readable at 16 px.</div>
+    </div>
+    <div class="sub">Preview sheet · 2026</div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2 class="name">01 &nbsp;Medic Lock</h2>
+      <div class="desc">The familiar padlock, re-imagined as a first-aid kit. Instantly says “doctor” without losing “unlock”.</div>
+      <div class="hero"><svg viewBox="0 0 512 512"><use href="#mark1"/></svg></div>
+      <div class="sizes">
+        <div class="size"><svg viewBox="0 0 512 512" width="44" height="44"><use href="#mark1"/></svg>44</div>
+        <div class="size"><svg viewBox="0 0 512 512" width="26" height="26"><use href="#mark1"/></svg>26</div>
+        <div class="size"><svg viewBox="0 0 512 512" width="16" height="16"><use href="#mark1"/></svg>16</div>
+      </div>
+      <div class="best"><b>Best for:</b> a warm, trustworthy identity. The clearest “doctor” signal at a glance.</div>
+    </div>
+
+    <div class="card">
+      <h2 class="name">02 &nbsp;Cross Key</h2>
+      <div class="desc">A medical cross becomes the bow of a key. One shape, two meanings: health and unlocking.</div>
+      <div class="hero"><svg viewBox="0 0 512 512"><use href="#mark2"/></svg></div>
+      <div class="sizes">
+        <div class="size"><svg viewBox="0 0 512 512" width="44" height="44"><use href="#mark2"/></svg>44</div>
+        <div class="size"><svg viewBox="0 0 512 512" width="26" height="26"><use href="#mark2"/></svg>26</div>
+        <div class="size"><svg viewBox="0 0 512 512" width="16" height="16"><use href="#mark2"/></svg>16</div>
+      </div>
+      <div class="best"><b>Best for:</b> a sharp, memorable product mark. Reads as a key first, a cross second.</div>
+    </div>
+
+    <div class="card">
+      <h2 class="name">03 &nbsp;Guardian Shield</h2>
+      <div class="desc">A shield protects the machine; a cross-keyhole restores it. Calm, premium, support-tool confidence.</div>
+      <div class="hero"><svg viewBox="0 0 512 512"><use href="#mark3"/></svg></div>
+      <div class="sizes">
+        <div class="size"><svg viewBox="0 0 512 512" width="44" height="44"><use href="#mark3"/></svg>44</div>
+        <div class="size"><svg viewBox="0 0 512 512" width="26" height="26"><use href="#mark3"/></svg>26</div>
+        <div class="size"><svg viewBox="0 0 512 512" width="16" height="16"><use href="#mark3"/></svg>16</div>
+      </div>
+      <div class="best"><b>Best for:</b> a serious, protective tone. Strongest at large sizes and in the installer.</div>
+    </div>
+  </div>
+
+  <div class="mock">
+    <div class="tile"><svg viewBox="0 0 512 512"><use href="#mark1"/></svg></div>
+    <div>
+      <div class="word">UNLOCK DIGITAL</div>
+      <div class="title">Autodesk Licensing Doctor</div>
+    </div>
+    <div class="hint">Header preview · Medic Lock<br>replaces the white store tile</div>
+  </div>
+
+  <div class="footer">
+    <span>All marks are original vector artwork · red / navy palette matches the app</span>
+    <span>AdskDoctor v1.5.3</span>
+  </div>
+</body>
+</html>

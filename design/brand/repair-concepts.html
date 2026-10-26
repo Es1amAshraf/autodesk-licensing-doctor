@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AdskDoctor repair-mark concepts</title>
+<style>
+  :root{
+    --bg:#070b12; --panel:#0d1421; --line:#223049;
+    --text:#eaf0f8; --muted:#8d9bb0; --red:#e41e2e; --green:#37d39b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI",Arial,sans-serif}
+  body{padding:34px 42px 30px}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:22px}
+  h1{font-size:24px;margin:0 0 5px;letter-spacing:.2px}
+  .sub{color:var(--muted);font-size:12.5px}
+  .tag{font-size:10.5px;font-weight:700;letter-spacing:.13em;color:var(--red);text-transform:uppercase}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+  .card{background:linear-gradient(180deg,#0f1725,#0a0f19);border:1px solid var(--line);border-radius:16px;padding:16px 17px 14px;position:relative;overflow:hidden}
+  .card:before{content:"";position:absolute;inset:0 0 auto 0;height:1px;background:linear-gradient(90deg,transparent,#30415f,transparent)}
+  .head{display:flex;align-items:baseline;gap:9px;margin-bottom:2px}
+  .num{font-size:11px;font-weight:800;color:var(--red);letter-spacing:.08em}
+  .name{font-size:16px;font-weight:700;margin:0}
+  .desc{font-size:11.5px;color:var(--muted);min-height:30px;margin:0 0 11px;line-height:1.45}
+  .row{display:flex;gap:14px;align-items:stretch}
+  .hero{flex:1;display:flex;align-items:center;justify-content:center;height:206px;border-radius:12px;background:
+    radial-gradient(320px 170px at 50% 30%,rgba(228,30,46,.10),transparent 70%),
+    linear-gradient(145deg,#0b1220,#060a11);border:1px solid #182338}
+  .hero svg{width:192px;height:192px;filter:drop-shadow(0 16px 24px rgba(0,0,0,.45))}
+  .side{width:118px;display:flex;flex-direction:column;justify-content:center;gap:9px;padding-left:2px}
+  .size{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:10px;background:#0a111c;border:1px solid #182338;border-radius:9px;padding:7px 8px}
+  .size svg{display:block;flex:0 0 auto}
+  .best{margin-top:11px;font-size:10.5px;color:#9fb0c7;border-top:1px solid #182338;padding-top:9px}
+  .best b{color:#d8e3f2;font-weight:600}
+  .mock{margin-top:18px;background:linear-gradient(180deg,#0f1623,#0a0f18);border:1px solid var(--line);border-radius:16px;padding:16px 20px;display:flex;align-items:center;gap:16px}
+  .mock .tile{width:54px;height:54px;flex:0 0 auto;border-radius:12px;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#131d2e,#0a0f19);border:1px solid #253450;box-shadow:0 8px 24px rgba(0,0,0,.35);overflow:hidden}
+  .mock .tile svg{width:50px;height:50px}
+  .mock .word{font-size:9.5px;font-weight:700;letter-spacing:.14em;color:#93a2b8;margin-bottom:3px}
+  .mock .title{font-size:21px;font-weight:700;letter-spacing:.1px}
+  .mock .hint{margin-left:auto;font-size:11.5px;color:var(--muted);text-align:right;line-height:1.5}
+  .footer{display:flex;justify-content:space-between;color:#5d6a7e;font-size:10.5px;margin-top:14px}
+</style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute;left:-9999px" aria-hidden="true">
+    <defs>
+      <linearGradient id="tileBg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#1c2941"/><stop offset=".55" stop-color="#111a2a"/><stop offset="1" stop-color="#070b12"/>
+      </linearGradient>
+      <linearGradient id="red" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ff4a5c"/><stop offset=".52" stop-color="#e41e2e"/><stop offset="1" stop-color="#b70d21"/>
+      </linearGradient>
+      <linearGradient id="redTile" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ff5468"/><stop offset=".45" stop-color="#e41e2e"/><stop offset="1" stop-color="#a80a1d"/>
+      </linearGradient>
+      <linearGradient id="white" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d9e2ef"/>
+      </linearGradient>
+      <linearGradient id="steel" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#f6f9fe"/><stop offset=".55" stop-color="#c8d3e3"/><stop offset="1" stop-color="#8e9bb0"/>
+      </linearGradient>
+      <linearGradient id="shieldFill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#182338"/><stop offset="1" stop-color="#0a101b"/>
+      </linearGradient>
+      <filter id="markShadow" x="-30%" y="-30%" width="160%" height="170%">
+        <feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#000" flood-opacity=".5"/>
+      </filter>
+      <filter id="softShadow" x="-30%" y="-30%" width="160%" height="170%">
+        <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000" flood-opacity=".45"/>
+      </filter>
+    </defs>
+
+    <!-- 01 FIX SHIELD -->
+    <symbol id="r1" viewBox="0 0 512 512">
+      <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#tileBg)"/>
+      <rect x="17" y="17" width="478" height="478" rx="111" fill="none" stroke="#2b3b57" stroke-width="2"/>
+      <ellipse cx="256" cy="72" rx="176" ry="84" fill="#e41e2e" opacity=".10"/>
+      <g filter="url(#markShadow)">
+        <path d="M256 58 L410 112 V242 C410 332 348 400 256 450 C164 400 102 332 102 242 V112 Z"
+              fill="url(#shieldFill)" stroke="url(#red)" stroke-width="26" stroke-linejoin="round"/>
+        <path d="M256 86 L388 132 V242 C388 318 336 376 256 420 C176 376 124 318 124 242 V132 Z"
+              fill="none" stroke="#32435f" stroke-width="3"/>
+        <g transform="translate(250 238) rotate(-38) scale(.88)">
+          <mask id="wm1" maskUnits="userSpaceOnUse" x="-220" y="-220" width="440" height="440">
+            <rect x="-220" y="-220" width="440" height="440" fill="#ffffff"/>
+            <circle cx="0" cy="-52" r="30" fill="#000000"/>
+            <polygon points="-36,-52 0,-142 36,-52" fill="#000000"/>
+          </mask>
+          <g mask="url(#wm1)" filter="url(#softShadow)">
+            <circle cx="0" cy="-52" r="62" fill="url(#white)"/>
+            <rect x="-23" y="-52" width="46" height="208" rx="23" fill="url(#white)"/>
+          </g>
+        </g>
+        <circle cx="347" cy="351" r="52" fill="#0b1320" stroke="#37d39b" stroke-width="8"/>
+        <path d="M323 351 L341 369 L374 334" fill="none" stroke="#37d39b" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+    </symbol>
+
+    <!-- 02 GEAR WRENCH -->
+    <symbol id="r2" viewBox="0 0 512 512">
+      <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#tileBg)"/>
+      <rect x="17" y="17" width="478" height="478" rx="111" fill="none" stroke="#2b3b57" stroke-width="2"/>
+      <ellipse cx="256" cy="72" rx="176" ry="84" fill="#e41e2e" opacity=".10"/>
+      <g filter="url(#markShadow)" transform="translate(256 256)">
+        <g fill="url(#red)">
+          <rect x="-39" y="-206" width="78" height="92" rx="21"/>
+          <rect x="-39" y="-206" width="78" height="92" rx="21" transform="rotate(45)"/>
+          <rect x="-39" y="-206" width="78" height="92" rx="21" transform="rotate(90)"/>
+          <rect x="-39" y="-206" width="78" height="92" rx="21" transform="rotate(135)"/>
+          <rect x="-39" y="-206" width="78" height="92" rx="21" transform="rotate(180)"/>
+          <rect x="-39" y="-206" width="78" height="92" rx="21" transform="rotate(225)"/>
+          <rect x="-39" y="-206" width="78" height="92" rx="21" transform="rotate(270)"/>
+          <rect x="-39" y="-206" width="78" height="92" rx="21" transform="rotate(315)"/>
+        </g>
+        <circle r="160" fill="url(#red)"/>
+        <circle r="95" fill="#0a101b"/>
+        <circle r="99" fill="none" stroke="#7d0e20" stroke-width="4"/>
+        <g transform="rotate(-40) scale(1.05)">
+          <mask id="wm2" maskUnits="userSpaceOnUse" x="-220" y="-220" width="440" height="440">
+            <rect x="-220" y="-220" width="440" height="440" fill="#ffffff"/>
+            <circle cx="0" cy="-48" r="26" fill="#000000"/>
+            <polygon points="-31,-48 0,-126 31,-48" fill="#000000"/>
+          </mask>
+          <g mask="url(#wm2)" filter="url(#softShadow)">
+            <circle cx="0" cy="-48" r="53" fill="url(#white)"/>
+            <rect x="-20" y="-48" width="40" height="176" rx="20" fill="url(#white)"/>
+          </g>
+        </g>
+      </g>
+    </symbol>
+
+    <!-- 03 TOOLKIT -->
+    <symbol id="r3" viewBox="0 0 512 512">
+      <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#redTile)"/>
+      <rect x="17" y="17" width="478" height="478" rx="111" fill="none" stroke="#ff7a88" stroke-width="2" opacity=".55"/>
+      <ellipse cx="210" cy="66" rx="210" ry="100" fill="#ffffff" opacity=".10"/>
+      <ellipse cx="330" cy="460" rx="220" ry="90" fill="#5c0412" opacity=".22"/>
+      <g filter="url(#markShadow)" transform="translate(256 256)">
+        <!-- screwdriver: handle top-left, tip bottom-right -->
+        <g transform="rotate(-45)">
+          <rect x="-33" y="-186" width="66" height="132" rx="30" fill="#0d1524" stroke="#ffffff" stroke-width="6"/>
+          <rect x="-22" y="-163" width="44" height="9" rx="4.5" fill="#ffffff" opacity=".65"/>
+          <rect x="-22" y="-139" width="44" height="9" rx="4.5" fill="#ffffff" opacity=".65"/>
+          <rect x="-22" y="-115" width="44" height="9" rx="4.5" fill="#ffffff" opacity=".65"/>
+          <rect x="-10" y="-62" width="20" height="172" rx="5" fill="url(#steel)" stroke="#0d1524" stroke-width="4"/>
+          <path d="M-10 100 L10 100 L0 144 Z" fill="url(#steel)" stroke="#0d1524" stroke-width="4" stroke-linejoin="round"/>
+        </g>
+        <!-- wrench: head top-right, handle bottom-left -->
+        <g transform="rotate(45) scale(.9)">
+          <mask id="wm3" maskUnits="userSpaceOnUse" x="-220" y="-220" width="440" height="440">
+            <rect x="-220" y="-220" width="440" height="440" fill="#ffffff"/>
+            <circle cx="0" cy="-52" r="30" fill="#000000"/>
+            <polygon points="-36,-52 0,-142 36,-52" fill="#000000"/>
+          </mask>
+          <g mask="url(#wm3)" filter="url(#softShadow)" stroke="#0d1524" stroke-width="7" paint-order="stroke">
+            <circle cx="0" cy="-52" r="62" fill="url(#white)"/>
+            <rect x="-23" y="-52" width="46" height="208" rx="23" fill="url(#white)"/>
+          </g>
+        </g>
+      </g>
+    </symbol>
+
+    <!-- 04 WRENCH CHECK -->
+    <symbol id="r4" viewBox="0 0 512 512">
+      <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#tileBg)"/>
+      <rect x="17" y="17" width="478" height="478" rx="111" fill="none" stroke="#2b3b57" stroke-width="2"/>
+      <ellipse cx="256" cy="72" rx="176" ry="84" fill="#e41e2e" opacity=".10"/>
+      <g filter="url(#markShadow)">
+        <g transform="translate(248 236) rotate(-38) scale(1.02)">
+          <mask id="wm4" maskUnits="userSpaceOnUse" x="-220" y="-220" width="440" height="440">
+            <rect x="-220" y="-220" width="440" height="440" fill="#ffffff"/>
+            <circle cx="0" cy="-52" r="30" fill="#000000"/>
+            <polygon points="-36,-52 0,-142 36,-52" fill="#000000"/>
+          </mask>
+          <g mask="url(#wm4)" filter="url(#softShadow)">
+            <circle cx="0" cy="-52" r="62" fill="url(#white)"/>
+            <rect x="-23" y="-52" width="46" height="208" rx="23" fill="url(#white)"/>
+          </g>
+        </g>
+        <circle cx="352" cy="356" r="64" fill="#0b1320" stroke="url(#red)" stroke-width="9"/>
+        <path d="M322 356 L343 377 L382 334" fill="none" stroke="#37d39b" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+    </symbol>
+  </svg>
+
+  <div class="top">
+    <div>
+      <div class="tag">AdskDoctor &nbsp;·&nbsp; repair-utility direction</div>
+      <h1>Marks that say “repair tool” at first glance</h1>
+      <div class="sub">Wrench, gear and checkmark language — the visual family of system-repair and problem-solving software. Still readable at 16 px.</div>
+    </div>
+    <div class="sub">Second round · 2026</div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="head"><span class="num">01</span><h2 class="name">Fix Shield</h2></div>
+      <div class="desc">Shield for protection, wrench for repair, green check for “fixed”. The most premium of the four.</div>
+      <div class="row">
+        <div class="hero"><svg viewBox="0 0 512 512"><use href="#r1"/></svg></div>
+        <div class="side">
+          <div class="size"><svg viewBox="0 0 512 512" width="44" height="44"><use href="#r1"/></svg>44 px</div>
+          <div class="size"><svg viewBox="0 0 512 512" width="26" height="26"><use href="#r1"/></svg>26 px</div>
+          <div class="size"><svg viewBox="0 0 512 512" width="16" height="16"><use href="#r1"/></svg>16 px</div>
+        </div>
+      </div>
+      <div class="best"><b>Best for:</b> a trustworthy, “safe repair” identity. Strong on the website hero and installer.</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><span class="num">02</span><h2 class="name">Gear Wrench</h2></div>
+      <div class="desc">A red cog with a wrench across it. The classic “system repair / settings” language, made bold.</div>
+      <div class="row">
+        <div class="hero"><svg viewBox="0 0 512 512"><use href="#r2"/></svg></div>
+        <div class="side">
+          <div class="size"><svg viewBox="0 0 512 512" width="44" height="44"><use href="#r2"/></svg>44 px</div>
+          <div class="size"><svg viewBox="0 0 512 512" width="26" height="26"><use href="#r2"/></svg>26 px</div>
+          <div class="size"><svg viewBox="0 0 512 512" width="16" height="16"><use href="#r2"/></svg>16 px</div>
+        </div>
+      </div>
+      <div class="best"><b>Best for:</b> instant category recognition. Looks at home next to CCleaner / Glary-type tools.</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><span class="num">03</span><h2 class="name">Toolkit</h2></div>
+      <div class="desc">Crossed wrench and screwdriver on a red tile. The most familiar “repair software” silhouette.</div>
+      <div class="row">
+        <div class="hero"><svg viewBox="0 0 512 512"><use href="#r3"/></svg></div>
+        <div class="side">
+          <div class="size"><svg viewBox="0 0 512 512" width="44" height="44"><use href="#r3"/></svg>44 px</div>
+          <div class="size"><svg viewBox="0 0 512 512" width="26" height="26"><use href="#r3"/></svg>26 px</div>
+          <div class="size"><svg viewBox="0 0 512 512" width="16" height="16"><use href="#r3"/></svg>16 px</div>
+        </div>
+      </div>
+      <div class="best"><b>Best for:</b> standing out on the desktop and in the Start menu. Strongest small-size contrast.</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><span class="num">04</span><h2 class="name">Wrench Check</h2></div>
+      <div class="desc">One white wrench, one green check. Minimal, confident, and focused on the result: problem solved.</div>
+      <div class="row">
+        <div class="hero"><svg viewBox="0 0 512 512"><use href="#r4"/></svg></div>
+        <div class="side">
+          <div class="size"><svg viewBox="0 0 512 512" width="44" height="44"><use href="#r4"/></svg>44 px</div>
+          <div class="size"><svg viewBox="0 0 512 512" width="26" height="26"><use href="#r4"/></svg>26 px</div>
+          <div class="size"><svg viewBox="0 0 512 512" width="16" height="16"><use href="#r4"/></svg>16 px</div>
+        </div>
+      </div>
+      <div class="best"><b>Best for:</b> a modern, uncluttered app icon. The green check is the “doctor” signature.</div>
+    </div>
+  </div>
+
+  <div class="mock">
+    <div class="tile"><svg viewBox="0 0 512 512"><use href="#r1"/></svg></div>
+    <div>
+      <div class="word">UNLOCK DIGITAL</div>
+      <div class="title">Autodesk Licensing Doctor</div>
+    </div>
+    <div class="hint">Header preview · Fix Shield<br>replaces the white store tile</div>
+  </div>
+
+  <div class="footer">
+    <span>Original vector artwork · red / navy palette matches the app</span>
+    <span>AdskDoctor v1.5.3</span>
+  </div>
+</body>
+</html>

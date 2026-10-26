@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UNLOCK DIGITAL — UI concept</title>
+<style>
+  :root {
+    --bg: #070a10;
+    --app: #0b0f16;
+    --panel: #111720;
+    --panel-2: #151d28;
+    --line: #222c3a;
+    --line-soft: #1a2330;
+    --text: #e8edf5;
+    --muted: #8a96a9;
+    --muted-2: #647186;
+    --red: #e41e2e;
+    --red-soft: #ff5967;
+    --green: #37d39b;
+    --amber: #f5b84b;
+    --blue: #7aa7ff;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background:
+      radial-gradient(900px 500px at 78% -10%, rgba(228,30,46,.10), transparent 60%),
+      radial-gradient(700px 420px at 8% 110%, rgba(122,167,255,.07), transparent 65%),
+      var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    padding: 34px;
+  }
+  .concept-label {
+    width: 1180px; margin: 0 auto 12px; display: flex; justify-content: space-between;
+    color: var(--muted-2); font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+  }
+  .concept-label span:last-child { color: #7d8a9e; letter-spacing: .06em; text-transform: none; }
+  .app {
+    width: 1180px; height: 760px; margin: 0 auto; overflow: hidden;
+    background: var(--app); border: 1px solid #273140; border-radius: 12px;
+    box-shadow: 0 34px 90px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.02) inset;
+    display: flex; flex-direction: column;
+  }
+  .titlebar {
+    height: 34px; flex: 0 0 34px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 0 0 14px; background: #10151d; border-bottom: 1px solid #1d2633;
+    font-size: 11.5px; color: #b8c2d2;
+  }
+  .titlebar .title-left { display: flex; align-items: center; gap: 9px; }
+  .titlebar .app-mark {
+    width: 18px; height: 18px; border-radius: 4px; background: #fff; display: grid; place-items: center;
+  }
+  .titlebar .app-mark img { width: 16px; height: 16px; object-fit: contain; }
+  .win-controls { display: flex; height: 100%; }
+  .win-controls span {
+    width: 46px; display: grid; place-items: center; color: #8f9bad; font-size: 13px;
+  }
+  .win-controls span.close:hover { background: #c42b1c; color: #fff; }
+  .app-header {
+    flex: 0 0 96px; display: flex; align-items: center; justify-content: space-between;
+    gap: 24px; padding: 15px 22px; background: linear-gradient(180deg, #121923, #0e141c);
+    border-bottom: 1px solid #202a38;
+  }
+  .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+  .brand .accent {
+    width: 5px; height: 58px; border-radius: 3px;
+    background: linear-gradient(180deg, #ff3a49, #b20f20);
+    box-shadow: 0 0 18px rgba(228,30,46,.45);
+  }
+  .logo-tile {
+    width: 54px; height: 54px; border-radius: 9px; background: #fff; display: grid; place-items: center;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.06); flex: 0 0 auto;
+  }
+  .logo-tile img { width: 46px; height: 46px; object-fit: contain; }
+  .brand-copy { min-width: 0; }
+  .eyebrow {
+    color: #95a1b3; font-size: 10px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase;
+    margin-bottom: 3px;
+  }
+  .brand h1 { margin: 0; font-size: 23px; line-height: 1.12; letter-spacing: -.02em; font-weight: 700; }
+  .brand .meta { margin-top: 5px; color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 8px; }
+  .version {
+    color: #b9c5d8; background: #1b2431; border: 1px solid #2b3748; border-radius: 999px;
+    padding: 2px 8px; font-size: 10.5px; font-weight: 600;
+  }
+  .header-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+  .ready {
+    display: inline-flex; align-items: center; gap: 7px; color: #9fb0c4; font-size: 11.5px;
+    background: #141c26; border: 1px solid #253141; border-radius: 999px; padding: 7px 10px;
+    margin-right: 3px;
+  }
+  .ready i { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px rgba(55,211,155,.75); }
+  .btn {
+    appearance: none; border: 1px solid #2a3647; background: #171f2a; color: #dbe4f1;
+    border-radius: 7px; padding: 8px 12px; font: 600 11.5px/1 "Segoe UI", sans-serif;
+    cursor: default; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    min-height: 32px; white-space: nowrap;
+  }
+  .btn svg { width: 14px; height: 14px; }
+  .btn.green { color: #84e6bc; border-color: #24523f; background: #12231d; }
+  .btn.red { color: #ff9aa2; border-color: #5c2027; background: #201318; }
+  .btn.primary { background: var(--red); border-color: var(--red); color: #fff; box-shadow: 0 6px 18px rgba(228,30,46,.18); }
+  .btn.small { min-height: 30px; padding: 7px 10px; font-size: 11px; }
+  .btn.wide { width: 100%; justify-content: flex-start; }
+  .app-body {
+    flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 352px minmax(0, 1fr);
+    gap: 16px; padding: 16px;
+  }
+  .sidebar {
+    min-height: 0; overflow: hidden; display: flex; flex-direction: column;
+    background: linear-gradient(180deg, #121923, #10161f);
+    border: 1px solid var(--line); border-radius: 11px; padding: 14px;
+  }
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .section-head > span:first-child { color: #c2ccdb; font-size: 11px; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
+  .section-head .hint { color: #6f7d90; font-size: 10.5px; }
+  .action-list { display: flex; flex-direction: column; gap: 5px; }
+  .action {
+    width: 100%; display: flex; align-items: center; gap: 10px; text-align: left;
+    background: #161e29; border: 1px solid #243041; border-radius: 8px;
+    padding: 6px 10px; color: #dfe7f2; min-height: 42px;
+  }
+  .action .ic {
+    width: 24px; height: 24px; border-radius: 6px; background: #1d2836; border: 1px solid #2a394c;
+    display: grid; place-items: center; flex: 0 0 auto; color: #9fb0c6;
+  }
+  .action .ic svg { width: 14px; height: 14px; }
+  .action .copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+  .action strong { font-size: 12px; font-weight: 650; letter-spacing: .005em; }
+  .action small { color: #7f8da1; font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .action .chev { color: #59687c; font-size: 19px; line-height: 1; }
+  .action.primary {
+    background: linear-gradient(180deg, #2a1720, #21131a); border-color: #5b2530;
+    box-shadow: 0 0 0 1px rgba(228,30,46,.08) inset;
+  }
+  .action.primary .ic { background: rgba(228,30,46,.16); border-color: rgba(228,30,46,.36); color: #ff8a94; }
+  .action.primary strong { color: #fff; }
+  .action.primary small { color: #c8969c; }
+  .action.primary .chev { color: #ff7c88; }
+  .divider { height: 1px; background: var(--line-soft); margin: 11px 0; }
+  .license-card {
+    background: #0e141c; border: 1px solid #202b3a; border-radius: 9px; padding: 10px;
+  }
+  .license-card .section-head { margin-bottom: 8px; }
+  .license-card .badge {
+    color: #8fd9bc; background: #12261f; border: 1px solid #1f4436; border-radius: 999px;
+    padding: 2px 7px; font-size: 9.5px; font-weight: 600;
+  }
+  .field-label { display: block; color: #748297; font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin: 7px 0 4px; }
+  .field {
+    height: 28px; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: #151d28; border: 1px solid #273447; border-radius: 6px; padding: 0 9px;
+    color: #d5deeb; font-size: 11px;
+  }
+  .field .caret { color: #7d8ca1; font-size: 9px; }
+  .license-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .license-actions .btn { flex: 1 1 auto; }
+  .danger-zone { margin-top: auto; padding-top: 10px; border-top: 1px solid #2a1c21; }
+  .danger-label {
+    color: #8c6670; font-size: 9px; font-weight: 700; letter-spacing: .12em;
+    text-transform: uppercase; margin: 0 0 6px 2px;
+  }
+  .danger-action {
+    width: 100%; display: flex; align-items: center; gap: 9px; text-align: left;
+    background: linear-gradient(180deg, #1d1318, #171014); border: 1px solid #4b222a;
+    border-radius: 8px; padding: 8px 9px; color: #ffd9dd;
+  }
+  .danger-action .ic {
+    width: 24px; height: 24px; border-radius: 6px; background: rgba(228,30,46,.13);
+    border: 1px solid rgba(228,30,46,.28); display: grid; place-items: center;
+    flex: 0 0 auto; color: #ff8c96;
+  }
+  .danger-action .ic svg { width: 14px; height: 14px; }
+  .danger-action .copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+  .danger-action strong { font-size: 11.5px; font-weight: 650; }
+  .danger-action small { color: #b58a91; font-size: 9.5px; line-height: 1.35; }
+  .danger-action .chev { color: #b5636d; font-size: 18px; line-height: 1; }
+  .log-panel {
+    min-width: 0; min-height: 0; display: flex; flex-direction: column;
+    background: #0b1017; border: 1px solid #202b3a; border-radius: 11px; overflow: hidden;
+  }
+  .log-head {
+    flex: 0 0 48px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 15px; background: #121923; border-bottom: 1px solid #202b3a;
+  }
+  .log-head .title { display: flex; align-items: center; gap: 9px; font-size: 12px; font-weight: 650; color: #dbe4f1; }
+  .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px rgba(55,211,155,.7); }
+  .log-sub { color: #67768a; font-size: 10px; font-weight: 500; margin-left: 2px; }
+  .log-actions { display: flex; gap: 5px; }
+  .icon-btn {
+    border: 1px solid #263243; background: #151d28; color: #93a3b8; border-radius: 6px;
+    font: 600 10px/1 "Segoe UI", sans-serif; padding: 6px 8px; display: inline-flex; align-items: center; gap: 5px;
+  }
+  .icon-btn svg { width: 12px; height: 12px; }
+  .system-strip {
+    flex: 0 0 37px; display: flex; align-items: center; gap: 6px; padding: 0 15px;
+    border-bottom: 1px solid #18222e; background: #0e151e; overflow: hidden;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 4px 8px;
+    font-size: 9.5px; font-weight: 600; white-space: nowrap; border: 1px solid #243143; color: #9caabd;
+    background: #131b25;
+  }
+  .chip::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: #6f7d90; }
+  .chip.ok { color: #8fdcb9; border-color: #1e3e32; background: #11221c; }
+  .chip.ok::before { background: var(--green); }
+  .chip.warn { color: #e7c485; border-color: #4a3a1e; background: #221c11; }
+  .chip.warn::before { background: var(--amber); }
+  .log {
+    flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 14px 16px;
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.72; color: #c3cedd;
+  }
+  .log-line { display: flex; gap: 9px; white-space: nowrap; }
+  .log-line .time { color: #506075; flex: 0 0 52px; }
+  .tag { flex: 0 0 42px; font-weight: 700; font-size: 10px; letter-spacing: .04em; }
+  .tag.info { color: #7aa7ff; }
+  .tag.ok { color: #52d6a3; }
+  .tag.warn { color: #e7b45b; }
+  .tag.err { color: #ff7b86; }
+  .log-line .msg { color: #b8c5d7; }
+  .log-line.dim .msg { color: #78879b; }
+  .log-line .path { color: #8fb7ff; }
+  .log-line.gap { height: 8px; }
+  .log-tip {
+    flex: 0 0 32px; display: flex; align-items: center; gap: 7px;
+    padding: 0 15px; color: #6f7e92; font-size: 10px;
+    border-top: 1px solid #18222e; background: #0d141c;
+  }
+  .log-tip svg { width: 12px; height: 12px; color: #7690b6; }
+  .log-footer {
+    flex: 0 0 38px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 15px; border-top: 1px solid #19232f; background: #0e141c;
+    color: #718096; font-size: 10px;
+  }
+  .log-footer .status { display: flex; align-items: center; gap: 7px; color: #94a3b6; }
+  .log-footer .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+  .log-footer .path { color: #526277; font-family: var(--mono); font-size: 9.5px; }
+  .app-footer {
+    flex: 0 0 32px; display: flex; align-items: center; gap: 18px; padding: 0 16px;
+    border-top: 1px solid #1b2532; background: #0e141c; color: #617084; font-size: 9.5px;
+  }
+  .app-footer .grow { flex: 1 1 auto; }
+  .progress { width: 160px; height: 4px; border-radius: 99px; background: #1d2836; overflow: hidden; }
+  .progress span { display: block; height: 100%; background: linear-gradient(90deg, #a91422, var(--red)); border-radius: inherit; }
+  .app-footer .right { color: #7e8da2; }
+</style>
+</head>
+<body>
+  <div class="concept-label">
+    <span>UNLOCK DIGITAL / UI concept</span>
+    <span>Visual direction only — functionality unchanged</span>
+  </div>
+
+  <div class="app">
+    <div class="titlebar">
+      <div class="title-left">
+        <span class="app-mark"><img src="../website/assets/logo.png" alt=""></span>
+        <span>UNLOCK DIGITAL — Autodesk Licensing Doctor</span>
+      </div>
+      <div class="win-controls"><span>—</span><span>□</span><span class="close">×</span></div>
+    </div>
+
+    <header class="app-header">
+      <div class="brand">
+        <div class="accent"></div>
+        <div class="logo-tile"><img src="../website/assets/logo.png" alt="UNLOCK DIGITAL"></div>
+        <div class="brand-copy">
+          <div class="eyebrow">UNLOCK DIGITAL</div>
+          <h1>Autodesk Licensing Doctor</h1>
+          <div class="meta">
+            <span>Diagnose and fix licensing problems</span>
+            <span class="version">v1.5.3</span>
+          </div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span class="ready"><i></i> Ready</span>
+        <button class="btn green">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg>
+          Update
+        </button>
+        <button class="btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+          العربية
+        </button>
+      </div>
+    </header>
+
+    <main class="app-body">
+      <aside class="sidebar">
+        <div class="section-head"><span>Quick actions</span><span class="hint">Start with a scan</span></div>
+        <div class="action-list">
+          <button class="action primary">
+            <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5M8 11h6M11 8v6"/></svg></span>
+            <span class="copy"><strong>Scan this PC</strong><small>Read-only health check</small></span>
+            <span class="chev">›</span>
+          </button>
+          <button class="action">
+            <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 19h14"/></svg></span>
+            <span class="copy"><strong>Create backup</strong><small>Capture state before any change</small></span>
+            <span class="chev">›</span>
+          </button>
+          <button class="action">
+            <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v5M14 11v5"/></svg></span>
+            <span class="copy"><strong>Clean this PC</strong><small>Remove non-genuine leftovers</small></span>
+            <span class="chev">›</span>
+          </button>
+          <button class="action">
+            <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.7-2.7 2.2-2.8Z"/></svg></span>
+            <span class="copy"><strong>Repair official components</strong><small>Reinstall the licensing stack</small></span>
+            <span class="chev">›</span>
+          </button>
+          <button class="action">
+            <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></span>
+            <span class="copy"><strong>Roll back</strong><small>Undo the last change</small></span>
+            <span class="chev">›</span>
+          </button>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="license-card">
+          <div class="section-head"><span>License mode</span><span class="badge">Single-user</span></div>
+          <label class="field-label">Product</label>
+          <div class="field"><span>3ds Max 2025 · 128Q1</span><span class="caret">▼</span></div>
+          <label class="field-label">Mode</label>
+          <div class="field"><span>Single-user (sign-in)</span><span class="caret">▼</span></div>
+          <div class="license-actions">
+            <button class="btn small">Apply licence mode</button>
+            <button class="btn small">Refresh</button>
+          </div>
+        </div>
+
+        <div class="danger-zone">
+          <div class="danger-label">Danger zone</div>
+          <button class="danger-action" title="Removes all Autodesk apps, licensing, services, registry entries and crack leftovers. A backup is created first.">
+            <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v5M14 11v5"/></svg></span>
+            <span class="copy"><strong>Remove Autodesk completely</strong><small>Uninstalls apps, licensing, services, registry entries and crack leftovers. Backup first.</small></span>
+            <span class="chev">›</span>
+          </button>
+        </div>
+      </aside>
+
+      <section class="log-panel">
+        <div class="log-head">
+          <div class="title"><span class="live-dot"></span> Activity log <span class="log-sub">Live output</span></div>
+          <div class="log-actions">
+            <button class="icon-btn" title="Open the last diagnostic report"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v5h5M10 12h5M10 16h5"/></svg> Report</button>
+            <button class="icon-btn" title="Save a support bundle for troubleshooting"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h16v11H4zM4 8l2-4h12l2 4M9 12h6"/></svg> Bundle</button>
+            <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="8" y="8" width="11" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/></svg> Copy</button>
+            <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m6 6 12 12M18 6 6 18"/></svg> Clear</button>
+          </div>
+        </div>
+        <div class="system-strip">
+          <span class="chip ok">Windows 11</span>
+          <span class="chip ok">Administrator</span>
+          <span class="chip ok">ADLS present</span>
+          <span class="chip warn">AdSSO needs repair</span>
+          <span class="chip">WebView2 ready</span>
+        </div>
+        <div class="log">
+          <div class="log-line"><span class="time">10:42:01</span><span class="tag info">INFO</span><span class="msg">Starting read-only diagnostic...</span></div>
+          <div class="log-line"><span class="time">10:42:01</span><span class="tag info">INFO</span><span class="msg">Checking Autodesk licensing services</span></div>
+          <div class="log-line"><span class="time">10:42:02</span><span class="tag ok">OK</span><span class="msg">AdskLicensingService is running</span></div>
+          <div class="log-line"><span class="time">10:42:02</span><span class="tag ok">OK</span><span class="msg">ADLS found at <span class="path">C:\Program Files (x86)\Common Files\Autodesk Shared\AdskLicensing</span></span></div>
+          <div class="log-line"><span class="time">10:42:03</span><span class="tag warn">WARN</span><span class="msg">AdSSO component is missing from the Current junction</span></div>
+          <div class="log-line"><span class="time">10:42:03</span><span class="tag info">INFO</span><span class="msg">Checking installed products and licence mode...</span></div>
+          <div class="log-line"><span class="time">10:42:04</span><span class="tag ok">OK</span><span class="msg">3ds Max 2025 · 128Q1 · 2025.0.0.F detected</span></div>
+          <div class="log-line"><span class="time">10:42:04</span><span class="tag info">INFO</span><span class="msg">Scan complete. No changes were made.</span></div>
+          <div class="log-line gap"></div>
+          <div class="log-line dim"><span class="time">10:42:04</span><span class="tag info">NEXT</span><span class="msg">Create a backup, then repair the official components.</span></div>
+        </div>
+        <div class="log-tip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></svg>
+          No changes are made by scanning. You stay in control.
+        </div>
+        <div class="log-footer">
+          <span class="status"><span class="dot"></span> Ready — no changes made</span>
+          <span class="path">%ProgramData%\Autodesk\AdskLicensingService</span>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <span>© Unlock Digital — By Eng. Eslam Ashraf</span>
+      <span class="grow"></span>
+      <div class="progress"><span></span></div>
+      <span class="right">v1.5.3 · Windows 10/11 · 64-bit</span>
+    </footer>
+  </div>
+</body>
+</html>
