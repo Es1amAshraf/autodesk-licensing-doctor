@@ -20,6 +20,26 @@ param(
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Xaml, System.Drawing
 
+# Never rely on PATH for the PowerShell host. Some Windows 10/11 machines have
+# a damaged PATH (or a policy that strips it), and then Get-Command powershell
+# fails even though Windows PowerShell is installed. $PSHOME is the folder of
+# the host that is already running this script, so it is always correct.
+function Get-PowerShellExe {
+    $candidates = @()
+    try { if ($PSHOME) { $candidates += (Join-Path $PSHOME 'powershell.exe') } } catch {}
+    try {
+        if ($env:SystemRoot) {
+            $candidates += (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe')
+        }
+    } catch {}
+    foreach ($c in $candidates) {
+        if ($c -and (Test-Path -LiteralPath $c)) { return $c }
+    }
+    $cmd = Get-Command powershell.exe -ErrorAction SilentlyContinue
+    if ($cmd -and $cmd.Source) { return $cmd.Source }
+    return 'powershell.exe'
+}
+
 # WPF needs an STA thread.
 if ([System.Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') {
     if ($PSCommandPath -and (Test-Path -LiteralPath $PSCommandPath)) {
@@ -51,26 +71,6 @@ function Get-AppDir {
     return (Get-Location).Path
 }
 $here = Get-AppDir
-
-# Never rely on PATH for the PowerShell host. Some Windows 10/11 machines have
-# a damaged PATH (or a policy that strips it), and then Get-Command powershell
-# fails even though Windows PowerShell is installed. $PSHOME is the folder of
-# the host that is already running this script, so it is always correct.
-function Get-PowerShellExe {
-    $candidates = @()
-    try { if ($PSHOME) { $candidates += (Join-Path $PSHOME 'powershell.exe') } } catch {}
-    try {
-        if ($env:SystemRoot) {
-            $candidates += (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe')
-        }
-    } catch {}
-    foreach ($c in $candidates) {
-        if ($c -and (Test-Path -LiteralPath $c)) { return $c }
-    }
-    $cmd = Get-Command powershell.exe -ErrorAction SilentlyContinue
-    if ($cmd -and $cmd.Source) { return $cmd.Source }
-    return 'powershell.exe'
-}
 
 # The tool repairs services and Program Files, so it must always run elevated.
 # The shortcuts and Run-GUI.vbs already ask for elevation; this is the final

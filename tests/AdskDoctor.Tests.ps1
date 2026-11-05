@@ -930,6 +930,9 @@ Describe 'Smart App Control launch fallback' {
         $gui | Should -Not -Match '\(Get-Command powershell\)\.Source'
         $gui | Should -Not -Match '& powershell\.exe'
         $gui | Should -Not -Match "Start-Process -FilePath 'powershell\.exe'"
+        $defIdx = $gui.IndexOf('function Get-PowerShellExe')
+        $callIdx = $gui.IndexOf('(Get-PowerShellExe)')
+        ($defIdx -lt $callIdx) | Should -Be $true
     }
 
     It 'forces elevation for direct script and cmd launches' {

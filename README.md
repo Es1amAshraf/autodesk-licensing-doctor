@@ -21,16 +21,9 @@ Windows 10 / 11 · GUI in **Arabic + English** · no installation required.
 
 ## Download
 
-> **Status (26 Oct 2026):** v1.5.5 is built locally and fixes the License mode
-> product picker, which used to show a raw PowerShell object instead of the
-> product name. It keeps the AutoCAD 2027 NLM installer-blocker fix and the
-> stripped-PATH fixes for Clean/Purge. The GitHub release is pending account
-> reinstatement; until then use the files in `releases\v1.5.5\` or the live
-> update host. Older releases stay in `releases\` for existing installs.
-
 | What | Link |
 |------|------|
-| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.5.exe` (2.41 MB) | [GitHub release (pending)](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/tag/v1.5.5) · local: `releases\v1.5.5\` · live: <https://adskdoctor.unlockdigital.online/#download> |
+| **Installer (recommended)** — `UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.5.exe` (2.41 MB) | [GitHub release](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/tag/v1.5.5) · local: `releases\v1.5.5\` · live: <https://adskdoctor.unlockdigital.online/#download> |
 | Portable `.zip` (no install) and full source | [releases page](https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest) · local: `releases\v1.5.5\` |
 | Always the newest release | <https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/latest> |
 
