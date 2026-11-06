@@ -55,10 +55,12 @@ function Say {
 function Copy-Tree {
     param([string]$Source,[string]$DestPath)
     if (-not (Test-Path -LiteralPath $Source)) { return $false }
+    $robocopy = Join-Path $env:SystemRoot 'System32\robocopy.exe'
+    if (-not (Test-Path -LiteralPath $robocopy)) { $robocopy = 'robocopy' }
     # /XJ: robocopy follows junctions by default, which stored the doctored old
     # build (behind AdskLicensing\Current) as a real folder and made UNDO copy
     # its files through the junction into the genuine build (lab run 2026-10-16)
-    & robocopy $Source $DestPath /E /R:1 /W:1 /XJ /NFL /NDL /NJH /NJS /NP | Out-Null
+    & $robocopy $Source $DestPath /E /R:1 /W:1 /XJ /NFL /NDL /NJH /NJS /NP | Out-Null
     return ($LASTEXITCODE -lt 8)
 }
 
@@ -417,6 +419,7 @@ Write-Host ''
 Write-Host 'UNDO complete. Reboot recommended.' -ForegroundColor Green
 "@
 Set-Content -LiteralPath $undoPath -Value $undo -Encoding UTF8
+$undoHash = (Get-FileHash -LiteralPath $undoPath -Algorithm SHA256).Hash
 Say ("  UNDO script: {0}" -f $undoPath) 'Gray'
 
 # ---------------------------------------------------------------------------
@@ -428,6 +431,7 @@ $manifest = [pscustomobject]@{
     Label        = $Label
     BackupFolder = $dest
     RestorePoint = $restore
+    UndoSha256   = $undoHash
     Items        = $script:Items
 }
 $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $dest 'manifest.json') -Encoding UTF8

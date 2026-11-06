@@ -251,7 +251,9 @@ foreach ($ur in $uninstallRoots) {
         $msiFound = $true
         $code = $k.PSChildName
         Step ("Uninstall {0} (MSI {1})" -f $dn, $code) {
-            $p = Start-Process -FilePath 'msiexec.exe' -ArgumentList ('/x {0} /qn /norestart' -f $code) -PassThru
+            $msiExe = Join-Path $env:SystemRoot 'System32\msiexec.exe'
+            if (-not (Test-Path -LiteralPath $msiExe)) { $msiExe = 'msiexec.exe' }
+            $p = Start-Process -FilePath $msiExe -ArgumentList ('/x {0} /qn /norestart' -f $code) -PassThru
             if (-not $p.WaitForExit(900000)) { try { $p.Kill() } catch { } ; throw 'msiexec did not finish within 15 minutes' }
             if ($p.ExitCode -notin @(0,1605,1614,3010,1641)) { throw ("msiexec exit code {0}" -f $p.ExitCode) }
         }

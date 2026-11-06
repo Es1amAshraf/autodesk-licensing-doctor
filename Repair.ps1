@@ -107,6 +107,44 @@ function Step {
 }
 function Section { param([string]$t) Write-Host ''; Write-Host ("== {0} ==" -f $t) -ForegroundColor Cyan }
 function Info { param([string]$t) Write-Host ("  " + $t) -ForegroundColor DarkGray }
+function Protect-DirectoryAcl {
+    param([string]$Path)
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { return }
+    if (-not $env:ProgramData -or -not $Path.StartsWith($env:ProgramData, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return
+    }
+    try {
+        $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $isAdmin = (New-Object Security.Principal.WindowsPrincipal($id)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        if (-not $isAdmin) { return }
+
+        $icacls = Join-Path $env:SystemRoot 'System32\icacls.exe'
+        if (Test-Path -LiteralPath $icacls) {
+            & $icacls $Path /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX" >$null 2>&1
+        }
+    } catch {}
+}
+
+function Expand-ArchiveSafe {
+    param([string]$ZipPath, [string]$Destination)
+    Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction SilentlyContinue | Out-Null
+    if (-not (Test-Path -LiteralPath $Destination)) {
+        New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+    }
+    Protect-DirectoryAcl -Path $Destination
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
+    try {
+        foreach ($e in $zip.Entries) {
+            if ($e.FullName -match '(^|[\\/])\.\.($|[\\/])' -or $e.FullName -match '^[\\/]') {
+                throw ('unsafe archive entry (Zip Slip): ' + $e.FullName)
+            }
+        }
+    } finally {
+        $zip.Dispose()
+    }
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipPath, $Destination)
+}
+
 function Test-IsAdmin {
     $id = [Security.Principal.WindowsIdentity]::GetCurrent()
     (New-Object Security.Principal.WindowsPrincipal($id)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -521,9 +559,8 @@ function Get-OfficialInstaller {
         Info ("{0}: SHA256 {1}" -f $Label, (Get-FileHash -LiteralPath $OutPath -Algorithm SHA256).Hash)
         $exe = $OutPath
         if ($OutPath -match '\.zip$') {
-            Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction SilentlyContinue | Out-Null
             $ex = $OutPath + '.expanded'
-            if (-not (Test-Path -LiteralPath $ex)) { [IO.Compression.ZipFile]::ExtractToDirectory($OutPath, $ex) }
+            if (-not (Test-Path -LiteralPath $ex)) { Expand-ArchiveSafe -ZipPath $OutPath -Destination $ex }
             # ADLS ships an .exe, the AdSSO archive ships Adsso.msi.
             $exe = Select-InstallerFromArchive -Path $ex -Label $Label
             if (-not $exe) { throw 'the archive does not contain an installer' }
@@ -543,6 +580,7 @@ function Get-OfficialInstaller {
 if ($Apply -and $AllowDownload) {
     $dlRoot = Join-Path $env:ProgramData 'UNLOCK DIGITAL\downloads'
     New-Item -ItemType Directory -Force -Path $dlRoot | Out-Null
+    Protect-DirectoryAcl -Path $dlRoot
     if (-not $adlsOk -and -not $AdlsInstaller) {
         $AdlsInstaller = Get-OfficialInstaller -Label 'ADLS' -Url 'https://damassets.autodesk.net/content/dam/autodesk/www/files/AdskLicensingInstaller-win-17.0.0.16519.zip' -OutPath (Join-Path $dlRoot 'AdskLicensingInstaller-win-17.0.0.16519.zip') -SignerLike 'Autodesk'
     }
@@ -593,9 +631,8 @@ function Invoke-Pkg {
     }
     # A downloaded archive (AdSSO) is still a zip when it comes from -InstallerDir.
     if ($Path -match '\.zip$') {
-        Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction SilentlyContinue | Out-Null
         $ex = $Path + '.expanded'
-        if (-not (Test-Path -LiteralPath $ex)) { [IO.Compression.ZipFile]::ExtractToDirectory($Path, $ex) }
+        if (-not (Test-Path -LiteralPath $ex)) { Expand-ArchiveSafe -ZipPath $Path -Destination $ex }
         $Path = Select-InstallerFromArchive -Path $ex -Label $Label
         if (-not $Path) { throw 'the archive does not contain an installer' }
     }

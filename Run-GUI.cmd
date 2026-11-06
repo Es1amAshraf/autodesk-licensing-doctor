@@ -8,7 +8,8 @@ rem fltmc needs elevation and does not depend on the Server service, unlike
 rem "net session". A disabled Server service must not cause an elevation loop.
 fltmc >nul 2>&1
 if errorlevel 1 (
-    "%PS%" -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+    set "LAUNCH_TARGET=%~f0"
+    "%PS%" -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath $env:LAUNCH_TARGET -Verb RunAs"
     exit /b
 )
 start "" "%PS%" -NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File "%~dp0AdskDoctor-GUI.ps1"

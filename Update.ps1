@@ -71,6 +71,27 @@ $repo    = 'Es1amAshraf/autodesk-licensing-doctor'
 $updRoot = $env:ADSKDOCTOR_UPDATEDIR
 if (-not $updRoot) { $updRoot = Join-Path $env:ProgramData 'UNLOCK DIGITAL\update' }
 
+function Protect-DirectoryAcl {
+    param([string]$Path)
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { return }
+    # Only harden shared system locations under ProgramData when running elevated
+    if (-not $env:ProgramData -or -not $Path.StartsWith($env:ProgramData, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return
+    }
+    try {
+        $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $isAdmin = (New-Object Security.Principal.WindowsPrincipal($id)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        if (-not $isAdmin) { return }
+
+        $icacls = Join-Path $env:SystemRoot 'System32\icacls.exe'
+        if (Test-Path -LiteralPath $icacls) {
+            # Strip inherited write perms from unprivileged users; grant Full Control
+            # only to Administrators (S-1-5-32-544) and SYSTEM (S-1-5-18), Read to Users (S-1-5-32-545)
+            & $icacls $Path /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX" >$null 2>&1
+        }
+    } catch {}
+}
+
 function Say { param([string]$m) Write-Host ('  ' + $m) }
 function Fail {
     param([string]$m)
@@ -346,6 +367,8 @@ if (-not $release.Sha256 -and -not $release.SumsLocation) {
 # --- download to a private folder ---------------------------------------------
 $dlDir = Join-Path $updRoot 'downloads'
 New-Item -ItemType Directory -Force -Path $dlDir | Out-Null
+Protect-DirectoryAcl -Path $updRoot
+Protect-DirectoryAcl -Path $dlDir
 $zipName  = 'AdskDoctor-v' + $latest + '-Portable.zip'
 $zipPath  = Join-Path $dlDir $zipName
 $sumsPath = Join-Path $dlDir 'SHA256SUMS.txt'
@@ -389,6 +412,7 @@ Say ('SHA256 ok: ' + $actual)
 $stage = Join-Path $updRoot ('staging\v' + $latest)
 if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
+Protect-DirectoryAcl -Path $stage
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 try {
     $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
@@ -462,6 +486,7 @@ Log 'apply-update finished'
 '@
 $enc = New-Object System.Text.UTF8Encoding($true)
 [System.IO.File]::WriteAllText($apply, $applyBody, $enc)
+Protect-DirectoryAcl -Path $apply
 
 Say ('staged in ' + $stage)
 Write-Host ('UPDATERESULT staged=' + $stage + ' version=' + $latest + ' apply=' + $apply + ' source=' + $release.Source)

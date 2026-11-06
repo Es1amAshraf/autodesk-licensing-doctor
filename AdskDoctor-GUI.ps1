@@ -1,4 +1,4 @@
-﻿<#
+<#
     AdskDoctor-GUI.ps1  -  UNLOCK DIGITAL  -  Autodesk Licensing Doctor (GUI)
     ---------------------------------------------------------------------------
     Bilingual Windows GUI (Arabic / English) with a live language toggle.
@@ -178,6 +178,7 @@ $L = @{
     noUndo        = 'مفيش نسخ فيها UNDO.'
     undoTitle     = 'رجوع (Undo)'
     undoConfirm   = 'ترجّع النسخة: '
+    undoTampered  = 'تم إلغاء العملية: تم اكتشاف تعديل على ملف UNDO.ps1 ولا يطابق البصمة الأمنية الأصلية.'
     noReport      = 'مفيش تقرير لسه. ابدأ بفحص الجهاز.'
     pickTitle     = 'اختَر نسخة احتياطية'
     pickOk        = 'اختيار'
@@ -297,6 +298,7 @@ $L = @{
     noUndo        = 'No backups contain an UNDO.'
     undoTitle     = 'Roll back (Undo)'
     undoConfirm   = 'Roll back this backup: '
+    undoTampered  = 'Operation aborted: UNDO.ps1 was modified and does not match its original security checksum.'
     noReport      = 'No report yet. Run a scan first.'
     pickTitle     = 'Choose a backup'
     pickOk        = 'Select'
@@ -1582,8 +1584,22 @@ $buttons['BtnUndo'].Add_Click({
     $pick = Show-Picker -Items (@($list | ForEach-Object { $_.Name })) -Title (T 'pickTitle')
     if (-not $pick) { return }
     $sel = $list | Where-Object { $_.Name -eq $pick } | Select-Object -First 1
+    $undoFile = Join-Path $sel.FullName 'UNDO.ps1'
+    $mfFile   = Join-Path $sel.FullName 'manifest.json'
+    if (Test-Path -LiteralPath $mfFile) {
+        try {
+            $mf = Get-Content -LiteralPath $mfFile -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json
+            if ($mf -and $mf.UndoSha256) {
+                $actualSha = (Get-FileHash -LiteralPath $undoFile -Algorithm SHA256).Hash
+                if ($actualSha -ne $mf.UndoSha256) {
+                    [System.Windows.MessageBox]::Show((T 'undoTampered'), (T 'undoTitle'), 'OK', 'Error') | Out-Null
+                    return
+                }
+            }
+        } catch {}
+    }
     $r = [System.Windows.MessageBox]::Show(((T 'undoConfirm') + $sel.Name + ' ?'), (T 'undoTitle'), 'YesNo', 'Warning')
-    if ($r -eq 'Yes') { Run-Task -Title ((T 'undoTitle') + ': ' + $sel.Name) -Arguments @('-File', (Join-Path $sel.FullName 'UNDO.ps1')) }
+    if ($r -eq 'Yes') { Run-Task -Title ((T 'undoTitle') + ': ' + $sel.Name) -Arguments @('-File', $undoFile) }
 })
 
 $buttons['BtnReport'].Add_Click({
