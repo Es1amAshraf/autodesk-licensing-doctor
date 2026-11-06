@@ -1,0 +1,8 @@
+{
+  "version": "1.5.5",
+  "portableUrl": "https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.5.5/AdskDoctor-v1.5.5-Portable.zip",
+  "sha256": "EB45A0C16E496A9DC3D15B99B7AE0651B1F9B7AD292829007B4A8099C49A7A20",
+  "sha256Url": "https://github.com/Es1amAshraf/autodesk-licensing-doctor/releases/download/v1.5.5/SHA256SUMS.txt",
+  "downloadPage": "https://adskdoctor.unlockdigital.online/#download",
+  "notes": "v1.5.5: Official GitHub Releases CDN integration, license-mode product picker fix, and regression test guards."
+}
