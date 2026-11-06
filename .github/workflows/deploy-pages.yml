@@ -24,4 +24,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: '041057a62b4ff9cd3d45024591ae8d4a'
-          command: pages deploy website --project-name=adskdoctor-updates
+          command: pages deploy website --project-name=adskdoctor-site --branch=main
