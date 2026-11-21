@@ -37,6 +37,8 @@ EB45A0C16E496A9DC3D15B99B7AE0651B1F9B7AD292829007B4A8099C49A7A20  AdskDoctor-v1.
 
 See [Verify your download](#verify-your-download).
 
+> **Security hardening on `main` (post-v1.5.5):** `Backup.ps1`, `Repair.ps1`, `Purge.ps1`, `Update.ps1`, `AdskDoctor-GUI.ps1`, and the `Run-*.cmd` launchers include tightened `%ProgramData%` ACL protections (mitigating local privilege escalation), Zip Slip path-traversal validation before extraction, `UNDO.ps1` integrity verification, and Cloudflare Pages CSP headers for [adskdoctor.unlockdigital.online](https://adskdoctor.unlockdigital.online) (`website/update.json`).
+
 The installer adds a desktop shortcut and an uninstaller, and carries the
 Fix Shield product mark. See [Quick start](#quick-start) below.
 
@@ -375,7 +377,7 @@ module and [Inno Setup 6](https://jrsoftware.org/isinfo.php) (for the installer 
 
 ```powershell
 # compile the exe and cut a release (Project.zip + Portable.zip + Setup.exe + record)
-.\Build-Release.ps1 -Version 1.3.3 -Notes "..." -Recompile
+.\Build-Release.ps1 -Version 1.5.5 -Notes "..." -Recompile
 ```
 
 Each release is stored under `releases\v<version>\` in **three forms**:
@@ -425,8 +427,8 @@ certificate), sign the built binaries yourself:
 
 ```powershell
 .\Sign.ps1 -List                                    # show usable certificates
-.\Sign.ps1 -Path .\releases\v1.3.3\*.exe -Thumbprint <sha1>
-.\Sign.ps1 -Verify -Path .\releases\v1.3.3\*.exe     # check a release
+.\Sign.ps1 -Path .\releases\v1.5.5\*.exe -Thumbprint <sha1>
+.\Sign.ps1 -Verify -Path .\releases\v1.5.5\*.exe     # check a release
 ```
 
 ---
@@ -451,7 +453,9 @@ certificate), sign the built binaries yourself:
 | `make-logo-icon.ps1` | generates `unlock-logo.ico` (installer / brand icon) from `unlock-logo.png` |
 | `.signpath/` | SignPath artifact configurations (`app-exe`, `setup-exe`) |
 | `.github/workflows/release-sign.yml` | CI: build → sign with SignPath → publish release |
-| `.github/workflows/ci.yml` | CI: parse + lint + config validation |
+| `.github/workflows/ci.yml` | CI: parse + lint + Pester tests + dry-run build |
+| `.github/workflows/deploy-pages.yml` | CI: deploy `website/` portal (`adskdoctor.unlockdigital.online`) to Cloudflare Pages |
+| `website/` | Landing page, `_headers` (CSP), `SHA256SUMS.txt`, and `update.json` CDN feed |
 | `Publish-Release.ps1` | one-command release: build → commit → push → publish |
 | `Sign.ps1` | Authenticode-sign release binaries with your own certificate (local alternative to CI signing) |
 | `SIGNPATH-SETUP.md` | step-by-step guide to enabling code signing |
@@ -479,7 +483,7 @@ are in **[CODE-SIGNING.md](CODE-SIGNING.md)**.
 Verify a downloaded file:
 
 ```powershell
-Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.3.3.exe |
+Get-AuthenticodeSignature .\UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.5.exe |
     Format-List Status, SignerCertificate
 ```
 
