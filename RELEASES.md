@@ -1,5 +1,13 @@
 ﻿# UNLOCK DIGITAL - Autodesk Licensing Doctor - Releases
 
+## v1.5.6  (2026-11-26 01:24:08)
+
+Repair now checks and updates outdated ADLS (17.1.0.16893) and Identity Manager (1.21.1.5) via official Autodesk URLs and website/update.json component feed.
+
+- `AdskDoctor-v1.5.6-Project.zip`  -  0.47 MB  -  SHA256 `28E202548B49074AA7E084E92AA7B138EDD4425036B736680C9261EF8B08AD90`
+- `AdskDoctor-v1.5.6-Portable.zip`  -  0.44 MB  -  SHA256 `50E0C740E87F0FDEB9633ABE5835B56841DA733E94552C9775D8EE86FB868358`
+- `UNLOCK-DIGITAL-AdskDoctor-Setup-1.5.6.exe`  -  2.41 MB  -  SHA256 `C10CA4C8FCD4A543B9B1B07ACBF4224FC9F0D009C77746CF283538F811845FF1`
+
 ## v1.5.5  (2026-10-26 16:56:35)
 
 Fix: the license-mode product picker now shows the product name instead of a raw PowerShell object. Scan, backup, clean and repair behaviour is unchanged.
