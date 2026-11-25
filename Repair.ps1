@@ -262,6 +262,27 @@ function Get-AdlsStack {
     }
 }
 
+function Get-ExeFileVersion {
+    param([string]$Path)
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { return $null }
+    try {
+        $vi = (Get-Item -LiteralPath $Path -ErrorAction Stop).VersionInfo
+        if ($vi.FileVersionRaw -and ($vi.FileVersionRaw -gt [version]'0.0.0.0')) {
+            return $vi.FileVersionRaw
+        }
+        foreach ($raw in @($vi.FileVersion, $vi.ProductVersion)) {
+            if ($raw -and ($raw -match '(\d+\.\d+\.\d+(?:\.\d+)?)')) {
+                try { return [version]$Matches[1] } catch { }
+            }
+        }
+    } catch { }
+    $parent = Split-Path -Leaf (Split-Path -Parent $Path)
+    if ($parent -match '^(\d+\.\d+\.\d+(?:\.\d+)?)$') {
+        try { return [version]$Matches[1] } catch { }
+    }
+    return $null
+}
+
 function Get-IdentityManagerExe {
     foreach ($root in @(
         (Join-Path $env:ProgramFiles 'Autodesk\AdskIdentityManager'),
@@ -388,6 +409,39 @@ if ($SkipNlmFix) {
 # ---------------------------------------------------------------------------
 Section 'Component state'
 $script:InstallTimeoutMin = 20
+$script:TargetAdlsVersion = [version]'17.1.0.16893'
+$script:TargetIdmVersion  = [version]'1.21.1.5'
+$script:TargetAdlsUrl     = 'https://damassets.autodesk.net/content/dam/autodesk/www/files/AdskLicensingInstaller-win-17.1.0.16893.zip'
+$script:TargetIdmUrl      = 'https://up1.autodesk.com/Windows/1.21.1.5/AdskIdentityManager-UCT-Installer.exe'
+
+function Resolve-ComponentTargets {
+    param([string]$ManifestUrl = 'https://adskdoctor.unlockdigital.online/update.json')
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $raw = (Invoke-WebRequest -Uri $ManifestUrl -UseBasicParsing -TimeoutSec 4 -ErrorAction Stop).Content
+        if (-not $raw) { return }
+        $doc = $raw | ConvertFrom-Json -ErrorAction Stop
+        if (-not $doc -or -not $doc.components) { return }
+        $adskHost = '^https://([a-z0-9-]+\.)*autodesk\.(com|net)/'
+        if ($doc.components.adls -and $doc.components.adls.version -and $doc.components.adls.url) {
+            $v = [version]$doc.components.adls.version
+            $u = [string]$doc.components.adls.url
+            if ($v -ge $script:TargetAdlsVersion -and $u -match $adskHost) {
+                $script:TargetAdlsVersion = $v
+                $script:TargetAdlsUrl     = $u
+            }
+        }
+        if ($doc.components.identityManager -and $doc.components.identityManager.version -and $doc.components.identityManager.url) {
+            $v = [version]$doc.components.identityManager.version
+            $u = [string]$doc.components.identityManager.url
+            if ($v -ge $script:TargetIdmVersion -and $u -match $adskHost) {
+                $script:TargetIdmVersion = $v
+                $script:TargetIdmUrl     = $u
+            }
+        }
+    } catch { }
+}
+Resolve-ComponentTargets
 
 $stack        = Get-AdlsStack -Root $adskLicensingRoot
 $adlsOk       = $stack.InstallOk       # service + a complete genuine build exists
@@ -395,6 +449,9 @@ $adlsCurrent  = $stack.CurrentOk       # Current also points at the newest usabl
 $adssOk       = Test-AdssO -Root $adskLicensingRoot -CommonFiles $commonFiles
 $idmExe       = Get-IdentityManagerExe
 $idmOk        = [bool]$idmExe
+$idmVer       = if ($idmExe) { Get-ExeFileVersion -Path $idmExe } else { $null }
+$adlsUpdateNeeded = [bool]($adlsOk -and $stack.Newest -and $stack.Newest.Version -lt $script:TargetAdlsVersion)
+$idmUpdateNeeded  = [bool]($idmOk -and $idmVer -and $idmVer -lt $script:TargetIdmVersion)
 $genuineOk    = [bool](@(
     (Join-Path $env:ProgramFiles 'Autodesk\Genuine Service\GenuineService.exe'),
     (Join-Path ${env:ProgramFiles(x86)} 'Autodesk\Genuine Service\GenuineService.exe')
@@ -403,9 +460,14 @@ $wv2Ok        = Test-WebView2
 
 Info ("ADLS      : {0}" -f $(if ($adlsOk) { 'installed' } else { 'MISSING or broken' }))
 if ($stack.Newest) { Info ("            newest usable build: {0}" -f $stack.Newest.Name) }
+if ($adlsUpdateNeeded) { Info ("            update available: {0} -> {1}" -f $stack.Newest.Version, $script:TargetAdlsVersion) }
 if ($adlsOk -and -not $adlsCurrent) { Info '            Current junction needs re-pointing (no installer needed)' }
 Info ("AdSSO     : {0}" -f $(if ($adssOk) { 'present / not needed' } else { 'MISSING' }))
 Info ("Identity  : {0}" -f $(if ($idmOk) { $idmExe } else { 'MISSING' }))
+if ($idmOk -and $idmVer) {
+    $idmNote = if ($idmUpdateNeeded) { " (update available -> $($script:TargetIdmVersion))" } else { '' }
+    Info ("            version: {0}{1}" -f $idmVer, $idmNote)
+}
 Info ("Genuine   : {0}" -f $(if ($genuineOk) { 'present' } else { 'MISSING' }))
 Info ("WebView2  : {0}" -f $(if ($wv2Ok) { 'present' } else { 'MISSING' }))
 
@@ -421,7 +483,11 @@ if ($CheckOnly) {
     if (-not $adssOk)    { $missingNames += 'AdSSO' }
     if (-not $idmOk)     { $missingNames += 'Identity' }
     if (-not $wv2Ok)     { $missingNames += 'WebView2' }
+    $outdatedNames = @()
+    if ($adlsUpdateNeeded) { $outdatedNames += 'ADLS' }
+    if ($idmUpdateNeeded)  { $outdatedNames += 'Identity' }
     Write-Host ('CHECKRESULT missing=' + ($missingNames -join ','))
+    Write-Host ('CHECKRESULT_OUTDATED outdated=' + ($outdatedNames -join ','))
     if ($script:LogPath) { try { Stop-Transcript | Out-Null } catch { } }
     exit 0
 }
@@ -470,8 +536,9 @@ if ($SkipReset) {
 # ---------------------------------------------------------------------------
 Section 'Official components'
 
-# auto-detect in -InstallerDir (only for a component that is missing)
-if ((-not ($adlsOk -and $adssOk -and $idmOk -and $genuineOk -and $wv2Ok)) -and $InstallerDir -and (Test-Path -LiteralPath $InstallerDir)) {
+# auto-detect in -InstallerDir (for a component that is missing or outdated)
+$allUpToDate = ($adlsOk -and -not $adlsUpdateNeeded -and $adssOk -and $idmOk -and -not $idmUpdateNeeded -and $genuineOk -and $wv2Ok)
+if ((-not $allUpToDate) -and $InstallerDir -and (Test-Path -LiteralPath $InstallerDir)) {
     # Get-ChildItem ignores a name -Include filter when the path comes from
     # -LiteralPath, which would let any file in this folder match the name
     # patterns below, so the extension filter is explicit instead.
@@ -486,23 +553,23 @@ if ((-not ($adlsOk -and $adssOk -and $idmOk -and $genuineOk -and $wv2Ok)) -and $
 }
 
 # A product's own install image carries the exact component builds it needs, so
-# the usual places are probed too (the wildcard path is intentional: a name
-# -Include filter is ignored with -LiteralPath, which would match anything).
-if ($adlsOk -and $adssOk -and $idmOk -and $genuineOk -and $wv2Ok) {
-    Info 'All official components are present - the installer scan is skipped'
-} elseif (-not $AdlsInstaller -or -not $AdSsoInstaller -or -not $IdentityInstaller) {
+# the usual places are probed too when a component is missing (never for an
+# already-installed component that just needs a newer update).
+if ($allUpToDate) {
+    Info 'All official components are present and up to date - the installer scan is skipped'
+} elseif ((-not $adlsOk -and -not $AdlsInstaller) -or (-not $adssOk -and -not $AdSsoInstaller) -or (-not $idmOk -and -not $IdentityInstaller)) {
     $images = @('C:\Autodesk\*\x64', 'C:\Autodesk\*\*\x64')
-    if (-not $AdlsInstaller) {
+    if (-not $adlsOk -and -not $AdlsInstaller) {
         # a product image keeps ADLS under x86\Licensing, a deployment under x64\AdskLicensing
         $adlsProbe = @()
         foreach ($root in @('C:\Autodesk\*\x64', 'C:\Autodesk\*\*\x64')) { $adlsProbe += (Join-Path $root 'AdskLicensing\*.exe') }
         foreach ($root in @('C:\Autodesk\*\x86', 'C:\Autodesk\*\*\x86')) { $adlsProbe += (Join-Path $root 'Licensing\AdskLicensing-installer.exe') }
         $AdlsInstaller = (Get-ChildItem -Path $adlsProbe -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
     }
-    if (-not $AdSsoInstaller) {
+    if (-not $adssOk -and -not $AdSsoInstaller) {
         $AdSsoInstaller = (Get-ChildItem -Path ($images | ForEach-Object { Join-Path $_ 'AdSSO\*' }) -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
     }
-    if (-not $IdentityInstaller) {
+    if (-not $idmOk -and -not $IdentityInstaller) {
         $idmProbe = @()
         foreach ($root in $images) {
             $idmProbe += (Join-Path $root 'AdskIdentityManager\*.exe')
@@ -511,7 +578,7 @@ if ($adlsOk -and $adssOk -and $idmOk -and $genuineOk -and $wv2Ok) {
         }
         $IdentityInstaller = (Get-ChildItem -Path $idmProbe -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
     }
-    if (-not $GenuineInstaller) {
+    if (-not $genuineOk -and -not $GenuineInstaller) {
         $GenuineInstaller = (Get-ChildItem -Path ($images | ForEach-Object { Join-Path $_ 'Components\*\Genuine*\*.exe' }) -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
     }
 }
@@ -581,15 +648,16 @@ if ($Apply -and $AllowDownload) {
     $dlRoot = Join-Path $env:ProgramData 'UNLOCK DIGITAL\downloads'
     New-Item -ItemType Directory -Force -Path $dlRoot | Out-Null
     Protect-DirectoryAcl -Path $dlRoot
-    if (-not $adlsOk -and -not $AdlsInstaller) {
-        $AdlsInstaller = Get-OfficialInstaller -Label 'ADLS' -Url 'https://damassets.autodesk.net/content/dam/autodesk/www/files/AdskLicensingInstaller-win-17.0.0.16519.zip' -OutPath (Join-Path $dlRoot 'AdskLicensingInstaller-win-17.0.0.16519.zip') -SignerLike 'Autodesk'
+    if ((-not $adlsOk -or $adlsUpdateNeeded) -and -not $AdlsInstaller) {
+        $adlsZip = "AdskLicensingInstaller-win-$($script:TargetAdlsVersion).zip"
+        $AdlsInstaller = Get-OfficialInstaller -Label 'ADLS' -Url $script:TargetAdlsUrl -OutPath (Join-Path $dlRoot $adlsZip) -SignerLike 'Autodesk'
     }
     if (-not $adssOk -and -not $AdSsoInstaller) {
         $AdSsoInstaller = Get-OfficialInstaller -Label 'AdSSO' -Url 'https://damassets.autodesk.net/content/dam/autodesk/external-assets/support-articles/autodesk-single-signon-win/adsso_2025_64-bit-update_installer.zip' -OutPath (Join-Path $dlRoot 'adsso_2025_64-bit-update_installer.zip') -SignerLike 'Autodesk'
     }
-    if (-not $idmOk -and -not $IdentityInstaller) {
-        $idmUrl = 'https://up1.autodesk.com/Windows/1.19.2.0/AdskIdentityManager-UCT-Installer.exe'
-        $IdentityInstaller = Get-OfficialInstaller -Label 'Identity Manager' -Url $idmUrl -OutPath (Join-Path $dlRoot 'AdskIdentityManager-UCT-Installer.exe') -SignerLike 'Autodesk'
+    if ((-not $idmOk -or $idmUpdateNeeded) -and -not $IdentityInstaller) {
+        $idmFile = "AdskIdentityManager-UCT-Installer-$($script:TargetIdmVersion).exe"
+        $IdentityInstaller = Get-OfficialInstaller -Label 'Identity Manager' -Url $script:TargetIdmUrl -OutPath (Join-Path $dlRoot $idmFile) -SignerLike 'Autodesk'
     }
     if (-not $wv2Ok -and -not $WebView2Installer) {
         $WebView2Installer = Get-OfficialInstaller -Label 'WebView2' -Url 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutPath (Join-Path $dlRoot 'MicrosoftEdgeWebview2Setup.exe') -SignerLike 'Microsoft'
@@ -612,7 +680,7 @@ function Show-ComponentSources {
     Write-Host '    4) WebView2 is a Microsoft component:' -ForegroundColor DarkGray
     Write-Host '         https://developer.microsoft.com/microsoft-edge/webview2' -ForegroundColor DarkGray
     Write-Host '    5) AdSSO (2020-2023): https://www.autodesk.com/support/technical/article/caas/tsarticles/ts/A785RG35hP8oUR96WrYkn.html' -ForegroundColor DarkGray
-    Write-Host '    6) Identity Manager (2024+): https://up1.autodesk.com/Windows/1.19.2.0/AdskIdentityManager-UCT-Installer.exe' -ForegroundColor DarkGray
+    Write-Host ("    6) Identity Manager (2024+): {0}" -f $script:TargetIdmUrl) -ForegroundColor DarkGray
     Write-Host '    7) or re-run with -AllowDownload: ADLS, AdSSO, Identity Manager and WebView2 are then fetched from the official servers' -ForegroundColor DarkGray
 }
 
@@ -658,9 +726,9 @@ function Invoke-Pkg {
 # switch). An explicit -SilentArgs still wins.
 $adlsArgs = if ($PSBoundParameters.ContainsKey('SilentArgs')) { $SilentArgs } else { '--mode unattended --unattendedmodeui none' }
 $idmArgs  = if ($IdentityInstaller -match 'UCT') { '-q' } else { '--mode unattended --unattendedmodeui none' }
-Invoke-Pkg -Label 'ADLS'             -Path $AdlsInstaller     -Args $adlsArgs  -Present $adlsOk
+Invoke-Pkg -Label 'ADLS'             -Path $AdlsInstaller     -Args $adlsArgs  -Present ($adlsOk -and -not $adlsUpdateNeeded)
 Invoke-Pkg -Label 'AdSSO'            -Path $AdSsoInstaller    -Args $SilentArgs -Present $adssOk
-Invoke-Pkg -Label 'Identity Manager' -Path $IdentityInstaller -Args $idmArgs   -Present $idmOk
+Invoke-Pkg -Label 'Identity Manager' -Path $IdentityInstaller -Args $idmArgs   -Present ($idmOk -and -not $idmUpdateNeeded)
 Invoke-Pkg -Label 'Genuine'          -Path $GenuineInstaller  -Args $SilentArgs -Present $genuineOk
 # the WebView2 installers (Evergreen bootstrapper and the standalone package)
 # both accept /silent /install
@@ -669,8 +737,10 @@ Invoke-Pkg -Label 'WebView2'         -Path $WebView2Installer -Args '/silent /in
 # A component that is absent and has no installer never gets invented here: say
 # where the official one comes from instead.
 if (-not $adlsOk -and -not $AdlsInstaller) { Show-ComponentSources 'AdskLicensing (ADLS)' }
+elseif ($adlsUpdateNeeded -and -not $AdlsInstaller) { Info ("ADLS: update available ({0} -> {1}); pass -AllowDownload or supply an installer to update" -f $stack.Newest.Version, $script:TargetAdlsVersion) }
 if (-not $adssOk -and -not $AdSsoInstaller) { Show-ComponentSources 'Autodesk Single Sign-On (AdSSO - 2020-2023 products)' }
 if (-not $idmOk -and -not $IdentityInstaller) { Show-ComponentSources 'Autodesk Identity Manager (2024+ products)' }
+elseif ($idmUpdateNeeded -and -not $IdentityInstaller) { Info ("Identity Manager: update available ({0} -> {1}); pass -AllowDownload or supply an installer to update" -f $idmVer, $script:TargetIdmVersion) }
 if (-not $wv2Ok -and -not $WebView2Installer) { Show-ComponentSources 'Microsoft Edge WebView2 (the sign-in window)' }
 if (-not $genuineOk -and -not $GenuineInstaller) { Show-ComponentSources 'Autodesk Genuine Service' }
 

@@ -1,4 +1,4 @@
-<#
+﻿<#
     AdskDoctor-GUI.ps1  -  UNLOCK DIGITAL  -  Autodesk Licensing Doctor (GUI)
     ---------------------------------------------------------------------------
     Bilingual Windows GUI (Arabic / English) with a live language toggle.
@@ -1518,20 +1518,30 @@ $buttons['BtnClean'].Add_Click({
     else              { Run-Task -Title (T 'cleanPreview') -Arguments @('-File', (Join-Path $here 'Clean.ps1')) }
 })
 
-# Runs Repair.ps1 -CheckOnly and returns the missing components ('' = healthy,
-# 'unknown' = the check itself failed). Synchronous and read-only: the repair
-# flow uses it so a machine that has everything is never asked for installer
-# files.
+# Runs Repair.ps1 -CheckOnly and returns missing and outdated components
+# ('' = healthy/up-to-date, 'unknown' = the check itself failed). Synchronous
+# and read-only: the repair flow uses it so a machine that has everything is
+# never asked for installer files.
 function Get-RepairCheck {
     param([string]$RepairPath)
     $oldNolog = $env:ADSKDOCTOR_NOLOG
     try {
         $env:ADSKDOCTOR_NOLOG = '1'
         $out = & (Get-PowerShellExe) -NoProfile -ExecutionPolicy Bypass -File $RepairPath -CheckOnly 2>&1
-        $m = [regex]::Match(($out -join "`n"), 'CHECKRESULT missing=([^\r\n]*)')
-        if (-not $m.Success) { return 'unknown' }
-        return $m.Groups[1].Value.Trim()
-    } catch { return 'unknown' }
+        $text = $out -join "`n"
+        $m = [regex]::Match($text, 'CHECKRESULT missing=([^\r\n]*)')
+        if (-not $m.Success) {
+            return [pscustomobject]@{ Missing = 'unknown'; Outdated = '' }
+        }
+        $o = [regex]::Match($text, 'CHECKRESULT_OUTDATED outdated=([^\r\n]*)')
+        $outdated = if ($o.Success) { $o.Groups[1].Value.Trim() } else { '' }
+        return [pscustomobject]@{
+            Missing  = $m.Groups[1].Value.Trim()
+            Outdated = $outdated
+        }
+    } catch {
+        return [pscustomobject]@{ Missing = 'unknown'; Outdated = '' }
+    }
     finally {
         if ($null -eq $oldNolog) { Remove-Item Env:ADSKDOCTOR_NOLOG -ErrorAction SilentlyContinue }
         else { $env:ADSKDOCTOR_NOLOG = $oldNolog }
@@ -1546,25 +1556,28 @@ $buttons['BtnRepair'].Add_Click({
     $repairArgs = @('-File', $repair)
     if ($r -eq 'Yes') { $repairArgs += '-Apply' }
     if ($r -eq 'Yes') {
-        # Ask the repair itself what is missing first: a healthy machine is
-        # never sent to a folder-picking dialogue, and pressing Repair is all
-        # the confirmation the official auto-fetch needs.
-        $missing = Get-RepairCheck -RepairPath $repair
-        $auto    = @('ADLS','AdSSO','Identity','WebView2')
-        $tokens  = @($missing -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-        $needAuto   = @($tokens | Where-Object { $auto -contains $_ })
+        # Ask the repair itself what is missing or outdated first: a healthy,
+        # up-to-date machine is never sent to a folder-picking dialogue, and
+        # pressing Repair is all the confirmation the official auto-fetch needs.
+        $check    = Get-RepairCheck -RepairPath $repair
+        $missing  = $check.Missing
+        $outdated = $check.Outdated
+        $auto     = @('ADLS','AdSSO','Identity','WebView2')
+        $tokens   = @($missing -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        $outTokens = @($outdated -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        $needAuto   = @(($tokens + $outTokens) | Select-Object -Unique | Where-Object { $auto -contains $_ })
         $needManual = @($tokens | Where-Object { $auto -notcontains $_ })
-        if ($missing -eq '') {
-            # everything is present - run straight away, no installer questions
+        if ($missing -eq '' -and $outdated -eq '') {
+            # everything is present and up to date - run straight away, no installer questions
         } elseif ($missing -ne 'unknown' -and $needManual.Count -eq 0) {
-            # all known components can be fetched and signature-verified by
-            # Repair itself (Autodesk CDN / Microsoft)
+            # all missing or outdated components can be fetched and signature-verified
+            # by Repair itself (Autodesk CDN / Microsoft)
             $repairArgs += '-AllowDownload'
         } else {
             # the check could not answer (Genuine Service has no public
             # download and is not required for sign-in, so it never gets
             # here): offer the local installer folder, but still auto-fetch
-            # the known components that are missing.
+            # the known components that are missing or outdated.
             $q = [System.Windows.MessageBox]::Show((T 'repairAskDir'), (T 'repairTitle'), 'YesNo', 'Question')
             if ($q -eq 'Yes') {
                 $dir = Browse-Folder -Title (T 'pickFolderTitle')

@@ -721,8 +721,8 @@ Describe 'v1.5.2 licensing repair (IBRAHIM case)' {
         $m.Groups[1].Value | Should -Not -Match "'Genuine'"
     }
 
-    It 'knows the official v1.5.2 sources (ADLS 17, AdSSO 2025, Identity UCT, WebView2)' {
-        $script:RepairSrc | Should -Match 'AdskLicensingInstaller-win-17\.0\.0\.16519\.zip'
+    It 'knows the official sources (ADLS 17, AdSSO 2025, Identity UCT, WebView2)' {
+        $script:RepairSrc | Should -Match 'AdskLicensingInstaller-win-17\.1\.0\.16893\.zip'
         $script:RepairSrc | Should -Match 'adsso_2025_64-bit-update_installer\.zip'
         $script:RepairSrc | Should -Match 'AdskIdentityManager-UCT-Installer\.exe'
         $script:RepairSrc | Should -Match 'LinkId=2124703'
@@ -1377,5 +1377,43 @@ Describe 'In-app GitHub updater' {
         $build | Should -Match 'Copy-Item \$runtimePayload \$sPort'
         $build | Should -Match 'Copy-Item \$runtimePayload \$sPayload'
         $build | Should -Match 'Copy-Item \$exe \$sProj -Force'
+    }
+}
+
+Describe 'Component update inside Repair' {
+    It 'targets the latest official ADLS and Identity Manager builds with versioned download paths' {
+        $repair = Get-Content -LiteralPath (Join-Path $script:Root 'Repair.ps1') -Raw
+        $repair | Should -Match "TargetAdlsVersion\s*=\s*\[version\]'17\.1\.0\.16893'"
+        $repair | Should -Match "TargetIdmVersion\s*=\s*\[version\]'1\.21\.1\.5'"
+        $repair | Should -Match 'AdskLicensingInstaller-win-17\.1\.0\.16893\.zip'
+        $repair | Should -Match '1\.21\.1\.5/AdskIdentityManager-UCT-Installer\.exe'
+        $repair | Should -Match 'AdskIdentityManager-UCT-Installer-\$\(\$script:TargetIdmVersion\)\.exe'
+    }
+
+    It 'reports outdated components in -CheckOnly and passes update-aware Present flags to Invoke-Pkg' {
+        $repair = Get-Content -LiteralPath (Join-Path $script:Root 'Repair.ps1') -Raw
+        $repair | Should -Match 'CHECKRESULT_OUTDATED outdated='
+        $repair | Should -Match '-Present \(\$adlsOk -and -not \$adlsUpdateNeeded\)'
+        $repair | Should -Match '-Present \(\$idmOk -and -not \$idmUpdateNeeded\)'
+        $repair | Should -Match 'if \(-not \$adlsOk -and -not \$AdlsInstaller\)'
+        $repair | Should -Match 'if \(-not \$idmOk -and -not \$IdentityInstaller\)'
+    }
+
+    It 'GUI Get-RepairCheck parses CHECKRESULT_OUTDATED so Repair auto-downloads updates' {
+        $gui = Get-Content -LiteralPath (Join-Path $script:Root 'AdskDoctor-GUI.ps1') -Raw
+        $gui | Should -Match 'CHECKRESULT_OUTDATED outdated='
+        $gui | Should -Match '\$check\.Outdated'
+    }
+
+    It 'website/update.json declares valid official component feed entries and Repair validates Autodesk hosts' {
+        $mf = Get-Content -LiteralPath (Join-Path $script:Root 'website\update.json') -Raw | ConvertFrom-Json
+        $mf.components.adls.version | Should -Be '17.1.0.16893'
+        $mf.components.adls.url | Should -Match '^https://([a-z0-9-]+\.)*autodesk\.(com|net)/'
+        $mf.components.identityManager.version | Should -Be '1.21.1.5'
+        $mf.components.identityManager.url | Should -Match '^https://([a-z0-9-]+\.)*autodesk\.(com|net)/'
+
+        $repair = Get-Content -LiteralPath (Join-Path $script:Root 'Repair.ps1') -Raw
+        $repair | Should -Match 'function Resolve-ComponentTargets'
+        $repair | Should -Match 'autodesk\\\.\(com\|net\)'
     }
 }
